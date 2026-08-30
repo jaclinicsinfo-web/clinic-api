@@ -9,6 +9,26 @@ function requerido(nome: string, valor: string | undefined): string {
   return valor;
 }
 
+function normalizarOrigem(origem: string): string {
+  return origem.trim().replace(/\/+$/, '');
+}
+
+function origensCors(): string[] {
+  const daEnv = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002')
+    .split(',')
+    .map(normalizarOrigem)
+    .filter(Boolean);
+
+  const extras = [
+    process.env.FRONTEND_URL,
+    'https://clinic-web-app-q4mc.onrender.com',
+  ]
+    .filter((origem): origem is string => Boolean(origem && origem.trim()))
+    .map(normalizarOrigem);
+
+  return [...new Set([...daEnv, ...extras])];
+}
+
 export const env = {
   PORT: Number(process.env.PORT ?? 3001),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
@@ -20,10 +40,7 @@ export const env = {
   JWT_EXPIRES_IN_LEMBRAR: process.env.JWT_EXPIRES_IN_LEMBRAR ?? '7d',
 
   FRONTEND_URL: process.env.FRONTEND_URL ?? 'http://localhost:3000',
-  CORS_ORIGIN: (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
-    .split(',')
-    .map((origem) => origem.trim())
-    .filter(Boolean),
+  CORS_ORIGIN: origensCors(),
 
   LANDING_API_KEY: requerido('LANDING_API_KEY', process.env.LANDING_API_KEY),
 } as const;
