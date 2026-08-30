@@ -1,0 +1,38 @@
+import express, { Application } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { env } from './config/env';
+import rotas from './routes';
+import { notFound, tratarErros } from './middlewares/error.middleware';
+import { AppError } from './lib/erros';
+
+export function criarApp(): Application {
+  const app = express();
+
+  app.use(helmet());
+
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Permite requisições sem origem (ex.: curl, apps server-to-server como a landing).
+        if (!origin || env.CORS_ORIGIN.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new AppError(403, 'Origem não permitida pelo CORS.'));
+      },
+      credentials: true,
+    }),
+  );
+
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  app.disable('x-powered-by');
+
+  app.use('/api', rotas);
+
+  app.use(notFound);
+  app.use(tratarErros);
+
+  return app;
+}
