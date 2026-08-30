@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { cnpjValido, telefoneValido } from '../lib/validacao';
+
 const apenasDigitos = (valor: string): string => valor.replace(/\D/g, '');
 
 export const cadastroSchema = z.object({
@@ -12,11 +14,11 @@ export const cadastroSchema = z.object({
     cnpj: z
       .string()
       .transform(apenasDigitos)
-      .refine((v) => v.length === 14, 'CNPJ deve conter 14 dígitos.'),
+      .refine(cnpjValido, 'CNPJ inválido.'),
     telefone: z
       .string()
       .transform(apenasDigitos)
-      .refine((v) => v.length === 10 || v.length === 11, 'Telefone deve conter 10 ou 11 dígitos.'),
+      .refine(telefoneValido, 'Telefone inválido.'),
     email: z.string().trim().toLowerCase().email('E-mail da clínica inválido.'),
   }),
   unidade: z.object({
