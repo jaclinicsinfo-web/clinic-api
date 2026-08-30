@@ -29,3 +29,17 @@ export async function criarPerfisPadrao(
 export async function buscarPorId(id: string): Promise<PerfilAcesso | null> {
   return prisma.perfilAcesso.findUnique({ where: { id } });
 }
+
+export async function listarPorClinica(clinicaId: string): Promise<PerfilAcesso[]> {
+  return prisma.perfilAcesso.findMany({
+    where: { clinicaId },
+    orderBy: { nome: 'asc' },
+  });
+}
+
+export async function buscarPorIdEClinica(
+  id: string,
+  clinicaId: string,
+): Promise<PerfilAcesso | null> {
+  return prisma.perfilAcesso.findFirst({ where: { id, clinicaId } });
+}

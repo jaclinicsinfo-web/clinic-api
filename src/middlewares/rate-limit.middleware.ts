@@ -24,3 +24,8 @@ export const limiteLogin = criarLimiter(
   10,
   'Muitas tentativas de login. Tente novamente em alguns minutos.',
 );
+
+export const limiteSetup = criarLimiter(
+  5,
+  'Muitas tentativas de configuração inicial. Tente novamente em alguns minutos.',
+);

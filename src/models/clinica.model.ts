@@ -30,6 +30,11 @@ export async function buscarPorId(id: string): Promise<Clinica | null> {
   return prisma.clinica.findUnique({ where: { id } });
 }
 
+export async function sistemaPrecisaSetup(): Promise<boolean> {
+  const total = await prisma.clinica.count();
+  return total === 0;
+}
+
 export interface DadosCadastro {
   planoId: string;
   clinica: {
@@ -48,14 +53,26 @@ export interface ResultadoCadastro {
   usuario: UsuarioCompleto;
 }
 
+const LOCK_SETUP_INICIAL = 872_341;
+
 /**
- * Cadastro pós-compra (landing). Cria em uma única transação:
+ * Cadastro pós-compra (landing) ou setup do primeiro acesso.
+ * Cria em uma única transação:
  * Clínica → Unidade → 5 Perfis de sistema → 1 Usuário Administrador (ativo).
  */
 export async function criarCadastroPosCompra(
   dados: DadosCadastro,
+  opcoes: { somenteSistemaVazio?: boolean } = {},
 ): Promise<ResultadoCadastro> {
   const { clinicaId, usuarioId } = await prisma.$transaction(async (tx) => {
+    if (opcoes.somenteSistemaVazio) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_SETUP_INICIAL})`;
+      const existentes = await tx.clinica.count();
+      if (existentes > 0) {
+        throw new AppError(409, 'O sistema já foi configurado. Entre com sua conta.');
+      }
+    }
+
     const clinica = await criarClinica(
       {
         nomeFantasia: dados.clinica.nomeFantasia,
@@ -103,4 +120,9 @@ export async function criarCadastroPosCompra(
   }
 
   return { clinica, usuario };
+}
+
+/** Primeiro acesso no painel: só conclui se ainda não existir nenhuma clínica. */
+export async function criarSetupInicial(dados: DadosCadastro): Promise<ResultadoCadastro> {
+  return criarCadastroPosCompra(dados, { somenteSistemaVazio: true });
 }

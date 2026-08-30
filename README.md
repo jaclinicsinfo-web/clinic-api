@@ -1,10 +1,13 @@
 # ClinicERP API
 
 API REST do **ClinicERP**, o ERP back-office para clínicas (médicas, odontológicas e estéticas).
-Esta entrega cobre **autenticação**, **cadastro pós-compra** (chamado pela landing após o pagamento) e o
-**catálogo de planos** com limite de contas de usuário.
+Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, **cadastro pós-compra**
+(chamado pela landing após o pagamento), **gestão de usuários** e o **catálogo de planos** com limite
+de contas.
 
-> Não existe portal do paciente. Não há sign-up aberto. A primeira clínica/usuário só nasce via `POST /api/cadastro`.
+> Não existe portal do paciente. Não há sign-up aberto. A primeira clínica e o administrador geral
+> nascem no painel (`POST /api/setup`) quando o banco está vazio, ou via `POST /api/cadastro` após o
+> pagamento na landing. Os demais usuários entram em Configurações › Usuários.
 
 ## Conceitos importantes
 
@@ -15,8 +18,11 @@ Esta entrega cobre **autenticação**, **cadastro pós-compra** (chamado pela la
   - Apenas usuários com `status = "ativo"` ocupam vaga. Ao inativar, a vaga é liberada.
 - **5 perfis = papéis RBAC**, criados por clínica no cadastro: `Administrador`, `Gestor`, `Recepção`,
   `Profissional de saúde`, `Financeiro`. Existem nos 3 planos. Perfil é papel de permissão, **não** conta.
+- **Setup no painel = banco vazio.** `GET /setup/status` diz se ainda não existe clínica. `POST /setup`
+  cria clínica, 1 unidade, os 5 perfis e 1 usuário **Administrador** ativo, e devolve a sessão. Depois
+  disso o endpoint responde 409.
 - **Cadastro = 1 admin após o pagamento.** A landing escolhe o plano pago, paga, e então chama
-  `POST /api/cadastro`, que cria a clínica, 1 unidade, os 5 perfis e 1 usuário Administrador ativo.
+  `POST /api/cadastro`, que cria o mesmo conjunto (clínica + unidade + perfis + Administrador).
 - **Sem seed de clínica.** Depois do `migrate`, o banco fica vazio — exceto o **catálogo de 3 planos**,
   inserido pela própria migração de forma idempotente (`ON CONFLICT`).
 
@@ -35,12 +41,12 @@ Route → Controller → Model → Controller → View → JSON
 src/
   app.ts            server.ts
   config/           env.ts, database.ts
-  middlewares/      auth, landing, error, rate-limit
-  routes/           index, health, auth, cadastro, planos
+  middlewares/      auth, admin, landing, error, rate-limit
+  routes/           index, health, auth, cadastro, setup, usuarios, planos
   models/           plano, clinica, unidade, usuario, perfil-acesso
-  controllers/      health, auth, cadastro, planos
-  views/            health, auth, cadastro, planos, error
-  validators/       auth, cadastro
+  controllers/      health, auth, cadastro, setup, usuarios, planos
+  views/            health, auth, cadastro, setup, usuarios, planos, error
+  validators/       auth, cadastro, usuarios
   lib/              jwt, password, mail, perfis-padrao, erros
 prisma/schema.prisma
 ```
@@ -89,7 +95,7 @@ executa `dist/server.js`.
 
 ## Segurança
 
-- `helmet`, CORS por lista (painel + landing), bcrypt (10+ rounds), rate limit em login e cadastro.
+- `helmet`, CORS por lista (painel + landing), bcrypt (10+ rounds), rate limit em login, setup e cadastro.
 - A landing autentica com `X-Landing-Key` (comparação *timing-safe*).
 - Nunca são logados senha, token, `LANDING_API_KEY` nem `DATABASE_URL`.
 - Erros sempre no formato `{ "message": "..." }` em pt-BR. IDs são UUID; datas em ISO 8601.
@@ -102,11 +108,17 @@ Base: `http://localhost:3001/api` · JSON · Bearer JWT.
 |--------|-----------------------------|-------------------|
 | GET    | `/health`                   | público           |
 | GET    | `/planos`                   | público           |
+| GET    | `/setup/status`             | público           |
+| POST   | `/setup`                    | público (só se vazio) |
 | POST   | `/cadastro`                 | `X-Landing-Key`   |
 | POST   | `/auth/login`               | público           |
 | POST   | `/auth/selecionar-unidade`  | Bearer            |
 | GET    | `/auth/me`                  | Bearer            |
 | POST   | `/auth/logout`              | Bearer            |
+| GET    | `/usuarios`                 | Bearer            |
+| POST   | `/usuarios`                 | Bearer (admin)    |
+| PATCH  | `/usuarios/:id/inativar`    | Bearer (admin)    |
+| PATCH  | `/usuarios/:id/ativar`      | Bearer (admin)    |
 
 ## Exemplos com curl
 
@@ -121,6 +133,32 @@ curl http://localhost:3001/api/health
 
 ```bash
 curl http://localhost:3001/api/planos
+```
+
+**Status do setup** (banco vazio → o painel abre o wizard)
+
+```bash
+curl http://localhost:3001/api/setup/status
+# { "precisaSetup": true }
+```
+
+**Setup do primeiro acesso** (só funciona enquanto não existir clínica)
+
+```bash
+curl -X POST http://localhost:3001/api/setup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "plano": "essencial",
+    "clinica": {
+      "nomeFantasia": "Clínica Exemplo",
+      "razaoSocial": "Clínica Exemplo LTDA",
+      "cnpj": "12345678000190",
+      "telefone": "1633214500",
+      "email": "contato@clinica.com.br"
+    },
+    "unidade": { "nome": "Unidade Centro", "cidade": "Ribeirão Preto" },
+    "usuario": { "nome": "Dona Admin", "email": "admin@clinica.com.br", "senha": "minimo8chars" }
+  }'
 ```
 
 **Cadastro pós-compra** (após o pagamento; requer `X-Landing-Key` e o `plano` pago)
@@ -156,11 +194,13 @@ curl -X POST http://localhost:3001/api/auth/login \
 `lembrar: true` → token de 7 dias; caso contrário, 12h. Com 1 unidade, `unidadeAtualId` já vem preenchido;
 com 2+ unidades vem `null` (use `POST /auth/selecionar-unidade`).
 
-## Limite de usuários do plano (já pronto para o futuro)
+## Gestão de usuários
 
-O `plano.model` expõe `listarPlanos()`, `buscarPorCodigo()`, `usoDaClinica()` e
-`assertPodeAdicionarUsuario()`. O `usuario.model.criarUsuario()` **sempre** chama
-`assertPodeAdicionarUsuario` antes de persistir um usuário ativo, retornando **403** com a mensagem
+`GET /usuarios` lista as contas da clínica autenticada, com perfis, unidades, plano e uso.
+`POST /usuarios` cria uma conta com o `perfilId` escolhido (Gestor, Recepção, etc.) e valida o
+limite do plano. Inativar libera a vaga; reativar volta a ocupá-la. Não é possível inativar a
+própria conta nem o último Administrador.
+
+O `usuario.model.criarUsuario()` **sempre** chama `assertPodeAdicionarUsuario` antes de persistir
+um usuário ativo, retornando **403** com a mensagem
 _"Limite de usuários do plano atingido. Faça upgrade para adicionar mais contas."_ quando o plano estoura.
-A tela de gestão de usuários do painel (endpoint interno) não faz parte desta entrega, mas a regra já está
-garantida no Model.

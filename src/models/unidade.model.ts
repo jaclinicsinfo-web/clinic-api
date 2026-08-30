@@ -28,3 +28,21 @@ export async function listarPorUsuario(usuarioId: string): Promise<Unidade[]> {
 export async function buscarPorId(id: string): Promise<Unidade | null> {
   return prisma.unidade.findUnique({ where: { id } });
 }
+
+export async function listarPorClinica(clinicaId: string): Promise<Unidade[]> {
+  return prisma.unidade.findMany({
+    where: { clinicaId },
+    orderBy: { nome: 'asc' },
+  });
+}
+
+export async function pertencemAClinica(
+  ids: string[],
+  clinicaId: string,
+): Promise<boolean> {
+  if (ids.length === 0) return false;
+  const encontrados = await prisma.unidade.count({
+    where: { clinicaId, id: { in: ids } },
+  });
+  return encontrados === new Set(ids).size;
+}

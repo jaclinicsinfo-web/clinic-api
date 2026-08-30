@@ -2,11 +2,11 @@ import { Plano } from '@prisma/client';
 import { UsuarioCompleto } from '../models/usuario.model';
 import { UsoUsuarios } from '../models/plano.model';
 
-function unidadeResumo(unidade: { id: string; nome: string; cidade: string }) {
+export function unidadeResumo(unidade: { id: string; nome: string; cidade: string }) {
   return { id: unidade.id, nome: unidade.nome, cidade: unidade.cidade };
 }
 
-function planoResumo(plano: Plano) {
+export function planoResumo(plano: Plano) {
   return {
     codigo: plano.codigo,
     nome: plano.nome,
@@ -14,7 +14,7 @@ function planoResumo(plano: Plano) {
   };
 }
 
-function usuarioResumo(usuario: UsuarioCompleto) {
+export function usuarioResumo(usuario: UsuarioCompleto) {
   return {
     id: usuario.id,
     nome: usuario.nome,

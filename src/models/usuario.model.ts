@@ -1,6 +1,8 @@
 import { Prisma, Usuario, PrismaClient } from '@prisma/client';
 import { prisma } from '../config/database';
 import { gerarHash } from '../lib/password';
+import { NOME_PERFIL_ADMINISTRADOR } from '../lib/perfis-padrao';
+import { AppError } from '../lib/erros';
 import { assertPodeAdicionarUsuario } from './plano.model';
 
 type ClientePrisma = PrismaClient | Prisma.TransactionClient;
@@ -41,8 +43,7 @@ export interface DadosNovoUsuario {
 
 /**
  * Cria um usuário. SEMPRE valida o limite de contas do plano ANTES de persistir.
- * Este é o ponto único de criação de contas, usado pelo cadastro e pelo endpoint
- * interno futuro de gestão de usuários.
+ * Ponto único de criação de contas: setup, cadastro pós-compra e gestão em Configurações.
  */
 export async function criarUsuario(
   dados: DadosNovoUsuario,
@@ -67,6 +68,49 @@ export async function criarUsuario(
       usuarioUnidades: {
         create: dados.unidadeIds.map((unidadeId) => ({ unidadeId })),
       },
+    },
+  });
+}
+
+export async function listarPorClinica(clinicaId: string): Promise<UsuarioCompleto[]> {
+  return prisma.usuario.findMany({
+    where: { clinicaId },
+    include: incluirRelacoes,
+    orderBy: { criadoEm: 'desc' },
+  });
+}
+
+export async function alterarStatus(
+  id: string,
+  status: 'ativo' | 'inativo',
+): Promise<UsuarioCompleto> {
+  if (status === 'ativo') {
+    const atual = await buscarPorId(id);
+    if (!atual) {
+      throw new AppError(404, 'Usuário não encontrado.');
+    }
+    await assertPodeAdicionarUsuario(atual.clinicaId);
+  }
+
+  await prisma.usuario.update({ where: { id }, data: { status } });
+
+  const atualizado = await buscarPorId(id);
+  if (!atualizado) {
+    throw new AppError(404, 'Usuário não encontrado.');
+  }
+  return atualizado;
+}
+
+export async function contarAdminsAtivos(
+  clinicaId: string,
+  excetoId?: string,
+): Promise<number> {
+  return prisma.usuario.count({
+    where: {
+      clinicaId,
+      status: 'ativo',
+      perfil: { nome: NOME_PERFIL_ADMINISTRADOR },
+      ...(excetoId ? { id: { not: excetoId } } : {}),
     },
   });
 }
