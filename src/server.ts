@@ -1,8 +1,23 @@
 import { criarApp } from './app';
 import { env } from './config/env';
 import { conectarBanco, desconectarBanco } from './config/database';
+import { aplicarMigracoes } from './lib/migracoes';
 
 async function iniciar(): Promise<void> {
+  const noRender = process.env.RENDER === 'true' || env.NODE_ENV === 'production';
+
+  if (noRender) {
+    try {
+      aplicarMigracoes();
+    } catch (err) {
+      console.error(
+        'Falha ao aplicar migrações do banco.',
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  }
+
   try {
     await conectarBanco();
     // eslint-disable-next-line no-console
