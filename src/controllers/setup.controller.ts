@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { cadastroSchema } from '../validators/cadastro.validator';
+import { env } from '../config/env';
+import { setupSchema } from '../validators/setup.validator';
 import { buscarPorCodigo, usoDaClinica } from '../models/plano.model';
 import {
   buscarPorCnpj,
@@ -35,11 +36,11 @@ export async function concluir(
       throw new AppError(409, 'O sistema já foi configurado. Entre com sua conta.');
     }
 
-    const dados = cadastroSchema.parse(req.body);
+    const dados = setupSchema.parse(req.body);
 
-    const plano = await buscarPorCodigo(dados.plano);
+    const plano = await buscarPorCodigo(env.PLANO);
     if (!plano || !plano.ativo) {
-      throw new AppError(400, 'Plano inválido.');
+      throw new AppError(500, 'Plano configurado no servidor é inválido.');
     }
 
     const cnpjExistente = await buscarPorCnpj(dados.clinica.cnpj);

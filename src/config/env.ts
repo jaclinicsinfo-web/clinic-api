@@ -13,6 +13,19 @@ function normalizarOrigem(origem: string): string {
   return origem.trim().replace(/\/+$/, '');
 }
 
+const PLANOS = ['essencial', 'profissional', 'ilimitado'] as const;
+export type CodigoPlano = (typeof PLANOS)[number];
+
+function planoDaClinica(): CodigoPlano {
+  const bruto = (process.env.PLANO ?? 'essencial').trim().toLowerCase();
+  if (!PLANOS.includes(bruto as CodigoPlano)) {
+    throw new Error(
+      `Variável de ambiente PLANO inválida: "${bruto}". Use essencial, profissional ou ilimitado.`,
+    );
+  }
+  return bruto as CodigoPlano;
+}
+
 function origensCors(): string[] {
   const daEnv = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002')
     .split(',')
@@ -41,6 +54,8 @@ export const env = {
 
   FRONTEND_URL: process.env.FRONTEND_URL ?? 'http://localhost:3000',
   CORS_ORIGIN: origensCors(),
+
+  PLANO: planoDaClinica(),
 
   LANDING_API_KEY: requerido('LANDING_API_KEY', process.env.LANDING_API_KEY),
 } as const;

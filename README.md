@@ -1,13 +1,12 @@
 # ClinicERP API
 
 API REST do **ClinicERP**, o ERP back-office para clínicas (médicas, odontológicas e estéticas).
-Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, **cadastro pós-compra**
-(chamado pela landing após o pagamento), **gestão de usuários** e o **catálogo de planos** com limite
-de contas.
+Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, **gestão de usuários** e o
+**catálogo de planos** com limite de contas.
 
-> Não existe portal do paciente. Não há sign-up aberto. A primeira clínica e o administrador geral
-> nascem no painel (`POST /api/setup`) quando o banco está vazio, ou via `POST /api/cadastro` após o
-> pagamento na landing. Os demais usuários entram em Configurações › Usuários.
+> Não existe portal do paciente. Não há sign-up aberto. A primeira clínica e o administrador nascem no
+> painel (`POST /api/setup`) quando o banco está vazio. O plano vem da variável `PLANO` na API. Os
+> demais usuários entram em Configurações › Usuários.
 
 ## Conceitos importantes
 
@@ -18,11 +17,11 @@ de contas.
   - Apenas usuários com `status = "ativo"` ocupam vaga. Ao inativar, a vaga é liberada.
 - **5 perfis = papéis RBAC**, criados por clínica no cadastro: `Administrador`, `Gestor`, `Recepção`,
   `Profissional de saúde`, `Financeiro`. Existem nos 3 planos. Perfil é papel de permissão, **não** conta.
+- **Plano = variável de ambiente.** `PLANO=essencial|profissional|ilimitado` no deploy da API. O
+  primeiro acesso **não** pergunta o plano. Quem define é quem configura o servidor.
 - **Setup no painel = banco vazio.** `GET /setup/status` diz se ainda não existe clínica. `POST /setup`
   cria clínica, 1 unidade, os 5 perfis e 1 usuário **Administrador** ativo, e devolve a sessão. Depois
   disso o endpoint responde 409.
-- **Cadastro = 1 admin após o pagamento.** A landing escolhe o plano pago, paga, e então chama
-  `POST /api/cadastro`, que cria o mesmo conjunto (clínica + unidade + perfis + Administrador).
 - **Sem seed de clínica.** Depois do `migrate`, o banco fica vazio — exceto o **catálogo de 3 planos**,
   inserido pela própria migração de forma idempotente (`ON CONFLICT`).
 
@@ -46,7 +45,7 @@ src/
   models/           plano, clinica, unidade, usuario, perfil-acesso
   controllers/      health, auth, cadastro, setup, usuarios, planos
   views/            health, auth, cadastro, setup, usuarios, planos, error
-  validators/       auth, cadastro, usuarios
+  validators/       auth, cadastro, setup, usuarios
   lib/              jwt, password, mail, perfis-padrao, erros
 prisma/schema.prisma
 ```
@@ -142,13 +141,12 @@ curl http://localhost:3001/api/setup/status
 # { "precisaSetup": true }
 ```
 
-**Setup do primeiro acesso** (só funciona enquanto não existir clínica)
+**Setup do primeiro acesso** (só funciona enquanto não existir clínica; o plano vem de `PLANO`)
 
 ```bash
 curl -X POST http://localhost:3001/api/setup \
   -H "Content-Type: application/json" \
   -d '{
-    "plano": "essencial",
     "clinica": {
       "nomeFantasia": "Clínica Exemplo",
       "razaoSocial": "Clínica Exemplo LTDA",
