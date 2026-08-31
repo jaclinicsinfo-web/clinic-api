@@ -17,6 +17,55 @@ export async function criarUnidade(
   });
 }
 
+export async function atualizarUnidade(
+  id: string,
+  dados: { nome: string; cidade: string },
+): Promise<Unidade> {
+  return prisma.unidade.update({
+    where: { id },
+    data: { nome: dados.nome, cidade: dados.cidade },
+  });
+}
+
+export async function alterarAtivo(id: string, ativo: boolean): Promise<Unidade> {
+  return prisma.unidade.update({
+    where: { id },
+    data: { ativo },
+  });
+}
+
+export async function nomeJaExiste(
+  clinicaId: string,
+  nome: string,
+  excetoId?: string,
+): Promise<boolean> {
+  const existente = await prisma.unidade.findFirst({
+    where: {
+      clinicaId,
+      nome: { equals: nome, mode: 'insensitive' },
+      ...(excetoId ? { id: { not: excetoId } } : {}),
+    },
+    select: { id: true },
+  });
+  return existente !== null;
+}
+
+export async function contarAtivas(clinicaId: string): Promise<number> {
+  return prisma.unidade.count({ where: { clinicaId, ativo: true } });
+}
+
+export async function concederAcesso(
+  unidadeId: string,
+  usuarioIds: string[],
+  tx: ClientePrisma = prisma,
+): Promise<void> {
+  if (usuarioIds.length === 0) return;
+  await tx.usuarioUnidade.createMany({
+    data: usuarioIds.map((usuarioId) => ({ usuarioId, unidadeId })),
+    skipDuplicates: true,
+  });
+}
+
 export async function listarPorUsuario(usuarioId: string): Promise<Unidade[]> {
   const vinculos = await prisma.usuarioUnidade.findMany({
     where: { usuarioId },

@@ -14,6 +14,8 @@ import {
 import { idsPertencemAClinica, listarAtivosPorClinica } from '../models/procedimento.model';
 import { buscarUsuarioDaClinica, listarUsuariosSaude } from '../models/usuario.model';
 import { listarDoProfissional } from '../models/agendamento.model';
+import { listarPorProfissional as listarComissoes } from '../models/comissao.model';
+import { comissaoResumo } from '../views/financeiro.view';
 import { NOME_PERFIL_PROFISSIONAL_SAUDE } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
 import { dataDeIso, dinheiro } from '../lib/datas';
@@ -133,11 +135,12 @@ export async function obterProfissional(req: Request, res: Response, next: NextF
     const profissional = await carregar(req);
     const clinicaId = req.auth!.clinicaId;
     const { inicio, fim } = inicioFimMesAtual();
-    const [indicadoresMes, pacientes, agenda, procedimentos] = await Promise.all([
+    const [indicadoresMes, pacientes, agenda, procedimentos, comissoes] = await Promise.all([
       indicadores(profissional.id, clinicaId, inicio, fim),
       pacientesAtendidos(profissional.id, clinicaId),
       listarDoProfissional(profissional.id, clinicaId),
       listarAtivosPorClinica(clinicaId),
+      listarComissoes(profissional.id, clinicaId),
     ]);
 
     const horas = horasSemanais(profissional.gradeHorarios);
@@ -164,6 +167,7 @@ export async function obterProfissional(req: Request, res: Response, next: NextF
         procedimentosHabilitados: procedimentos
           .filter((item) => habilitados.has(item.id))
           .map((item) => ({ id: item.id, nome: item.nome })),
+        comissoes: comissoes.map(comissaoResumo),
       }),
     );
   } catch (err) {

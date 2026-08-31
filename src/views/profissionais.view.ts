@@ -97,6 +97,7 @@ export function montarDetalheProfissional(params: {
   }[];
   agenda: unknown[];
   procedimentosHabilitados: { id: string; nome: string }[];
+  comissoes?: unknown[];
 }) {
   return {
     profissional: profissionalCompleto(params.profissional),
@@ -104,5 +105,6 @@ export function montarDetalheProfissional(params: {
     pacientesAtendidos: params.pacientesAtendidos,
     agenda: params.agenda,
     procedimentosHabilitados: params.procedimentosHabilitados,
+    comissoes: params.comissoes ?? [],
   };
 }

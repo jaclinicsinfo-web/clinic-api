@@ -3,8 +3,47 @@ import { prisma } from '../config/database';
 import { criarUnidade } from './unidade.model';
 import { criarPerfisPadrao } from './perfil-acesso.model';
 import { criarUsuario, buscarPorId as buscarUsuarioPorId, UsuarioCompleto } from './usuario.model';
+import { criarPadrao as criarFormasPadrao } from './forma-pagamento.model';
 import { NOME_PERFIL_ADMINISTRADOR } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
+
+const clinicaCadastroSelect = {
+  id: true,
+  nomeFantasia: true,
+  razaoSocial: true,
+  cnpj: true,
+  telefone: true,
+  email: true,
+  cep: true,
+  rua: true,
+  numero: true,
+  complemento: true,
+  bairro: true,
+  cidade: true,
+  uf: true,
+  logoMime: true,
+  planoId: true,
+  criadoEm: true,
+  atualizadoEm: true,
+  unidades: { orderBy: { nome: 'asc' as const } },
+} satisfies Prisma.ClinicaSelect;
+
+export type ClinicaCadastro = Prisma.ClinicaGetPayload<{ select: typeof clinicaCadastroSelect }>;
+
+export interface DadosAtualizacaoClinica {
+  nomeFantasia: string;
+  razaoSocial: string;
+  cnpj: string;
+  telefone: string;
+  email: string;
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string | null;
+  bairro: string;
+  cidade: string;
+  uf: string;
+}
 
 type ClientePrisma = PrismaClient | Prisma.TransactionClient;
 
@@ -28,6 +67,60 @@ export async function buscarPorCnpj(cnpj: string): Promise<Clinica | null> {
 
 export async function buscarPorId(id: string): Promise<Clinica | null> {
   return prisma.clinica.findUnique({ where: { id } });
+}
+
+export async function buscarCadastro(id: string): Promise<ClinicaCadastro | null> {
+  return prisma.clinica.findUnique({
+    where: { id },
+    select: clinicaCadastroSelect,
+  });
+}
+
+export async function cnpjEmUso(cnpj: string, excetoId: string): Promise<boolean> {
+  const existente = await prisma.clinica.findUnique({ where: { cnpj }, select: { id: true } });
+  return existente !== null && existente.id !== excetoId;
+}
+
+export async function atualizarCadastro(
+  id: string,
+  dados: DadosAtualizacaoClinica,
+): Promise<ClinicaCadastro> {
+  return prisma.clinica.update({
+    where: { id },
+    data: dados,
+    select: clinicaCadastroSelect,
+  });
+}
+
+export async function buscarLogo(
+  id: string,
+): Promise<{ logoMime: string; logoBytes: Buffer } | null> {
+  const clinica = await prisma.clinica.findUnique({
+    where: { id },
+    select: { logoMime: true, logoBytes: true },
+  });
+  if (!clinica?.logoMime || !clinica.logoBytes) return null;
+  return { logoMime: clinica.logoMime, logoBytes: Buffer.from(clinica.logoBytes) };
+}
+
+export async function salvarLogo(
+  id: string,
+  logoMime: string,
+  logoBytes: Uint8Array,
+): Promise<ClinicaCadastro> {
+  return prisma.clinica.update({
+    where: { id },
+    data: { logoMime, logoBytes: Buffer.from(logoBytes) },
+    select: clinicaCadastroSelect,
+  });
+}
+
+export async function removerLogo(id: string): Promise<ClinicaCadastro> {
+  return prisma.clinica.update({
+    where: { id },
+    data: { logoMime: null, logoBytes: null },
+    select: clinicaCadastroSelect,
+  });
 }
 
 export async function sistemaPrecisaSetup(): Promise<boolean> {
@@ -91,6 +184,7 @@ export async function criarCadastroPosCompra(
     );
 
     const perfis = await criarPerfisPadrao(clinica.id, tx);
+    await criarFormasPadrao(clinica.id, tx);
     const perfilAdmin = perfis.find((p) => p.nome === NOME_PERFIL_ADMINISTRADOR);
     if (!perfilAdmin) {
       throw new AppError(500, 'Falha ao criar os perfis de acesso.');

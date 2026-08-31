@@ -16,6 +16,8 @@ import {
   listarAtivosPorClinica as listarProfissionaisAtivos,
 } from '../models/profissional.model';
 import { datasPorPacientes, listarDoPaciente } from '../models/agendamento.model';
+import { listarPorClinica as listarCobrancas, saldosPorPaciente } from '../models/cobranca.model';
+import { cobrancaResumo } from '../views/financeiro.view';
 import {
   buscarAcompanhamento,
   criarAcompanhamento,
@@ -174,6 +176,10 @@ export async function listarPacientes(
       clinicaId,
       pacientes.map((item) => item.id),
     );
+    const saldoPorPaciente = await saldosPorPaciente(
+      clinicaId,
+      pacientes.map((item) => item.id),
+    );
 
     res.json(
       montarListaPacientes({
@@ -182,6 +188,7 @@ export async function listarPacientes(
         profissionais,
         somenteProprios,
         agendaPorPaciente,
+        saldoPorPaciente,
       }),
     );
   } catch (err) {
@@ -217,12 +224,13 @@ export async function obterPaciente(
     const verProntuario = podeVerProntuario(usuario.perfil.nome);
     const registrar = podeRegistrarProntuario(usuario.perfil.nome);
 
-    const [agendamentos, acompanhamentos, atendimentos, documentos, agendaMap] = await Promise.all([
+    const [agendamentos, acompanhamentos, atendimentos, documentos, agendaMap, cobrancas] = await Promise.all([
       listarDoPaciente(paciente.id, clinicaId),
       verProntuario ? listarAcompanhamentos(paciente.id, clinicaId) : Promise.resolve([]),
       verProntuario ? listarAtendimentos(paciente.id, clinicaId) : Promise.resolve([]),
       verProntuario ? listarDocumentos(paciente.id, clinicaId) : Promise.resolve([]),
       datasPorPacientes(clinicaId, [paciente.id]),
+      listarCobrancas(clinicaId, paciente.id),
     ]);
 
     if (verProntuario) {
@@ -239,6 +247,8 @@ export async function obterPaciente(
     const proximos = agendamentos
       .filter((item) => futuros.has(item.status) && (dataCivil(item.data) ?? '') >= hoje)
       .sort((a, b) => `${dataCivil(a.data)}${a.horaInicio}`.localeCompare(`${dataCivil(b.data)}${b.horaInicio}`));
+    const cobrancasResumo = cobrancas.map(cobrancaResumo);
+    const saldoDevedor = cobrancasResumo.reduce((total, item) => total + (item.valorAberto ?? 0), 0);
 
     res.json(
       montarDetalhePaciente({
@@ -248,9 +258,11 @@ export async function obterPaciente(
         atendimentos: atendimentos.map((item) => atendimentoResumo(item, paciente.id)),
         acompanhamentos: acompanhamentos.map(acompanhamentoResumo),
         agendamentos: agendamentos.map(agendamentoResumo),
+        cobrancas: cobrancasResumo,
         documentos: documentos.map((item) => documentoResumo(item, paciente.id)),
         podeVerProntuario: verProntuario,
         podeRegistrarProntuario: registrar,
+        saldoDevedor,
       }),
     );
   } catch (err) {

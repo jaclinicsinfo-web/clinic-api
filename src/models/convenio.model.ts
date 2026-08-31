@@ -146,7 +146,7 @@ export async function listarPacientesVinculados(convenioId: string, clinicaId: s
 }
 
 export async function indicadoresDoMes(convenioId: string, clinicaId: string, inicioMes: Date, fimMes: Date) {
-  const [pacientesVinculados, atendimentos] = await Promise.all([
+  const [pacientesVinculados, atendimentos, taxaGlosa] = await Promise.all([
     prisma.paciente.count({ where: { convenioId, clinicaId } }),
     prisma.agendamento.findMany({
       where: {
@@ -157,12 +157,19 @@ export async function indicadoresDoMes(convenioId: string, clinicaId: string, in
       },
       select: { valor: true },
     }),
+    prisma.loteConvenio.findMany({
+      where: { convenioId, clinicaId, status: { in: ['pago', 'glosado', 'parcial'] } },
+      select: { valorApresentado: true, valorGlosado: true },
+    }),
   ]);
+
+  const apresentado = taxaGlosa.reduce((total, lote) => total + Number(lote.valorApresentado), 0);
+  const glosado = taxaGlosa.reduce((total, lote) => total + Number(lote.valorGlosado), 0);
 
   return {
     pacientesVinculados,
     atendimentosMes: atendimentos.length,
     faturamentoMes: atendimentos.reduce((total, item) => total + Number(item.valor), 0),
-    taxaGlosa: 0,
+    taxaGlosa: apresentado > 0 ? (glosado / apresentado) * 100 : 0,
   };
 }

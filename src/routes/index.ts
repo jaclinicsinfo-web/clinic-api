@@ -11,6 +11,9 @@ import conveniosRoutes from './convenios.routes';
 import procedimentosRoutes from './procedimentos.routes';
 import profissionaisRoutes from './profissionais.routes';
 import agendaRoutes from './agenda.routes';
+import financeiroRoutes from './financeiro.routes';
+import formasPagamentoRoutes from './formas-pagamento.routes';
+import clinicaRoutes from './clinica.routes';
 
 const router = Router();
 
@@ -26,5 +29,8 @@ router.use('/convenios', conveniosRoutes);
 router.use('/procedimentos', procedimentosRoutes);
 router.use('/profissionais', profissionaisRoutes);
 router.use('/agenda', agendaRoutes);
+router.use('/financeiro', financeiroRoutes);
+router.use('/formas-pagamento', formasPagamentoRoutes);
+router.use('/clinica', clinicaRoutes);
 
 export default router;

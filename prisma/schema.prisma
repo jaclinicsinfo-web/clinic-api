@@ -28,6 +28,15 @@ model Clinica {
   cnpj         String   @unique
   telefone     String
   email        String
+  cep          String?
+  rua          String?
+  numero       String?
+  complemento  String?
+  bairro       String?
+  cidade       String?
+  uf           String?
+  logoMime     String?
+  logoBytes    Bytes?
   planoId      String   @db.Uuid
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -47,6 +56,11 @@ model Clinica {
   atendimentos        Atendimento[]
   documentosPaciente  DocumentoPaciente[]
   logsProntuario      LogAcessoProntuario[]
+  formasPagamento     FormaPagamento[]
+  cobrancas           Cobranca[]
+  despesas            Despesa[]
+  lotesConvenio       LoteConvenio[]
+  comissoes           Comissao[]
 
   @@map("clinicas")
 }
@@ -63,6 +77,8 @@ model Unidade {
   pacientes       Paciente[]
   agendamentos    Agendamento[]
   listaEspera     ListaEsperaItem[]
+  cobrancas       Cobranca[]
+  despesas        Despesa[]
 
   @@map("unidades")
 }
@@ -134,6 +150,8 @@ model Convenio {
   pacientes    Paciente[]
   tabelaPrecos ConvenioProcedimento[]
   agendamentos Agendamento[]
+  cobrancas    Cobranca[]
+  lotes        LoteConvenio[]
 
   @@unique([clinicaId, nome])
   @@index([clinicaId, status])
@@ -206,6 +224,7 @@ model Profissional {
   listaEspera         ListaEsperaItem[]
   acompanhamentos     AcompanhamentoClinico[]
   atendimentos        Atendimento[]
+  comissoes           Comissao[]
 
   @@unique([clinicaId, cpf])
   @@index([clinicaId, status])
@@ -286,6 +305,7 @@ model Paciente {
   atendimentos          Atendimento[]
   documentos            DocumentoPaciente[]
   logsProntuario        LogAcessoProntuario[]
+  cobrancas             Cobranca[]
 
   @@unique([clinicaId, cpf])
   @@index([clinicaId, unidadeId])
@@ -324,6 +344,7 @@ model Agendamento {
   convenio     Convenio?     @relation(fields: [convenioId], references: [id], onDelete: SetNull)
   criadoPor    Usuario       @relation("AgendamentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
   atendimento  Atendimento?
+  cobranca     Cobranca?
 
   @@index([clinicaId, data])
   @@index([clinicaId, profissionalId, data])
@@ -466,4 +487,148 @@ model LogAcessoProntuario {
 
   @@index([clinicaId, pacienteId, criadoEm])
   @@map("logs_acesso_prontuario")
+}
+
+model FormaPagamento {
+  id        String  @id @default(uuid()) @db.Uuid
+  clinicaId String  @db.Uuid
+  codigo    String
+  nome      String
+  taxa      Decimal @default(0) @db.Decimal(5, 2)
+  ativo     Boolean @default(true)
+  ordem     Int     @default(0)
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicaId, codigo])
+  @@index([clinicaId, ativo])
+  @@map("formas_pagamento")
+}
+
+model Cobranca {
+  id             String    @id @default(uuid()) @db.Uuid
+  clinicaId      String    @db.Uuid
+  unidadeId      String    @db.Uuid
+  pacienteId     String    @db.Uuid
+  agendamentoId  String?   @unique @db.Uuid
+  descricao      String
+  valor          Decimal   @db.Decimal(12, 2)
+  formaPagamento String?
+  convenioId     String?   @db.Uuid
+  status         String    @default("pendente")
+  vencimento     DateTime  @db.Date
+  pagoEm         DateTime? @db.Date
+  observacoes    String?
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  clinica     Clinica           @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade     Unidade           @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  paciente    Paciente          @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
+  agendamento Agendamento?      @relation(fields: [agendamentoId], references: [id], onDelete: SetNull)
+  convenio    Convenio?         @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  parcelas    ParcelaCobranca[]
+  lotes       LoteGuia[]
+
+  @@index([clinicaId, status])
+  @@index([clinicaId, vencimento])
+  @@index([clinicaId, pacienteId])
+  @@map("cobrancas")
+}
+
+model ParcelaCobranca {
+  id             String    @id @default(uuid()) @db.Uuid
+  cobrancaId     String    @db.Uuid
+  numero         Int
+  valor          Decimal   @db.Decimal(12, 2)
+  vencimento     DateTime  @db.Date
+  status         String    @default("pendente")
+  pagoEm         DateTime? @db.Date
+  formaPagamento String?
+
+  cobranca Cobranca @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+
+  @@unique([cobrancaId, numero])
+  @@map("parcelas_cobranca")
+}
+
+model Despesa {
+  id             String    @id @default(uuid()) @db.Uuid
+  clinicaId      String    @db.Uuid
+  unidadeId      String    @db.Uuid
+  descricao      String
+  categoria      String
+  fornecedor     String
+  valor          Decimal   @db.Decimal(12, 2)
+  vencimento     DateTime  @db.Date
+  status         String    @default("a_pagar")
+  recorrente     Boolean   @default(false)
+  formaPagamento String?
+  pagoEm         DateTime? @db.Date
+  observacoes    String?
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade Unidade @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+
+  @@index([clinicaId, status])
+  @@index([clinicaId, vencimento])
+  @@map("despesas")
+}
+
+model LoteConvenio {
+  id                String    @id @default(uuid()) @db.Uuid
+  clinicaId         String    @db.Uuid
+  convenioId        String    @db.Uuid
+  competencia       String
+  status            String    @default("aberto")
+  valorApresentado  Decimal   @db.Decimal(12, 2)
+  valorGlosado      Decimal   @default(0) @db.Decimal(12, 2)
+  valorRecebido     Decimal   @default(0) @db.Decimal(12, 2)
+  enviadoEm         DateTime? @db.Date
+  previsaoPagamento DateTime? @db.Date
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  clinica  Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  convenio Convenio   @relation(fields: [convenioId], references: [id], onDelete: Restrict)
+  guias    LoteGuia[]
+
+  @@unique([clinicaId, convenioId, competencia])
+  @@index([clinicaId, competencia])
+  @@map("lotes_convenio")
+}
+
+model LoteGuia {
+  loteId     String @db.Uuid
+  cobrancaId String @db.Uuid
+
+  lote     LoteConvenio @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  cobranca Cobranca     @relation(fields: [cobrancaId], references: [id], onDelete: Restrict)
+
+  @@id([loteId, cobrancaId])
+  @@map("lote_guias")
+}
+
+model Comissao {
+  id                String    @id @default(uuid()) @db.Uuid
+  clinicaId         String    @db.Uuid
+  profissionalId    String    @db.Uuid
+  competencia       String
+  atendimentos      Int
+  faturamentoGerado Decimal   @db.Decimal(12, 2)
+  percentual        Decimal   @db.Decimal(5, 2)
+  valorComissao     Decimal   @db.Decimal(12, 2)
+  status            String    @default("prevista")
+  pagoEm            DateTime? @db.Date
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  clinica      Clinica      @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+
+  @@unique([clinicaId, profissionalId, competencia])
+  @@index([clinicaId, competencia])
+  @@map("comissoes")
 }

@@ -101,6 +101,18 @@ export async function alterarStatus(
   return atualizado;
 }
 
+export async function listarIdsAdministradoresAtivos(clinicaId: string): Promise<string[]> {
+  const admins = await prisma.usuario.findMany({
+    where: {
+      clinicaId,
+      status: 'ativo',
+      perfil: { nome: NOME_PERFIL_ADMINISTRADOR },
+    },
+    select: { id: true },
+  });
+  return admins.map((item) => item.id);
+}
+
 export async function contarAdminsAtivos(
   clinicaId: string,
   excetoId?: string,

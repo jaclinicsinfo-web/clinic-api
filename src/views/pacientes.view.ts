@@ -19,7 +19,11 @@ export function profissionalResumo(profissional: { id: string; nome: string }) {
 
 export function pacienteResumo(
   paciente: PacienteCompleto,
-  agenda?: { ultimoAtendimento: string | null; proximoAgendamento: string | null },
+  extras?: {
+    ultimoAtendimento: string | null;
+    proximoAgendamento: string | null;
+    saldoDevedor?: number;
+  },
 ) {
   const responsavel = paciente.responsavelNome
     ? {
@@ -66,9 +70,9 @@ export function pacienteResumo(
     consentimentoLgpd: paciente.consentimentoLgpd,
     autorizacaoImagem: paciente.autorizacaoImagem,
     status: paciente.status,
-    ultimoAtendimento: agenda?.ultimoAtendimento ?? null,
-    proximoAgendamento: agenda?.proximoAgendamento ?? null,
-    saldoDevedor: 0,
+    ultimoAtendimento: extras?.ultimoAtendimento ?? null,
+    proximoAgendamento: extras?.proximoAgendamento ?? null,
+    saldoDevedor: extras?.saldoDevedor ?? 0,
     criadoEm: paciente.criadoEm.toISOString(),
     atualizadoEm: paciente.atualizadoEm.toISOString(),
   };
@@ -91,9 +95,13 @@ export function montarListaPacientes(params: {
   profissionais: { id: string; nome: string }[];
   somenteProprios: boolean;
   agendaPorPaciente?: Map<string, { ultimoAtendimento: string | null; proximoAgendamento: string | null }>;
+  saldoPorPaciente?: Map<string, number>;
 }) {
   const pacientes = params.pacientes.map((paciente) =>
-    pacienteResumo(paciente, params.agendaPorPaciente?.get(paciente.id)),
+    pacienteResumo(paciente, {
+      ...(params.agendaPorPaciente?.get(paciente.id) ?? { ultimoAtendimento: null, proximoAgendamento: null }),
+      saldoDevedor: params.saldoPorPaciente?.get(paciente.id) ?? 0,
+    }),
   );
   return {
     pacientes,
@@ -125,17 +133,22 @@ export function montarDetalhePaciente(params: {
   atendimentos: unknown[];
   acompanhamentos: unknown[];
   agendamentos: unknown[];
+  cobrancas: unknown[];
   documentos: unknown[];
   podeVerProntuario: boolean;
   podeRegistrarProntuario: boolean;
+  saldoDevedor?: number;
 }) {
   return {
-    paciente: pacienteResumo(params.paciente, params.agenda),
+    paciente: pacienteResumo(params.paciente, {
+      ...(params.agenda ?? { ultimoAtendimento: null, proximoAgendamento: null }),
+      saldoDevedor: params.saldoDevedor ?? 0,
+    }),
     proximosAgendamentos: params.proximosAgendamentos,
     atendimentos: params.atendimentos,
     acompanhamentos: params.acompanhamentos,
     agendamentos: params.agendamentos,
-    cobrancas: [],
+    cobrancas: params.cobrancas,
     documentos: params.documentos,
     podeVerProntuario: params.podeVerProntuario,
     podeRegistrarProntuario: params.podeRegistrarProntuario,

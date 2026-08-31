@@ -43,6 +43,7 @@ import { AppError } from '../lib/erros';
 import { dataCivil, dataDeIso, dinheiro, hojeCivil } from '../lib/datas';
 import { profissionalCompleto } from '../views/profissionais.view';
 import { procedimentoResumo } from '../views/procedimentos.view';
+import { garantirDoAgendamento } from '../models/cobranca.model';
 import {
   montarAgenda,
   montarAgendamento,
@@ -321,6 +322,19 @@ export async function alterarStatusAgendamento(req: Request, res: Response, next
     }
 
     const atualizado = await alterarStatus(agendamento.id, status);
+    if (status === 'atendido') {
+      await garantirDoAgendamento({
+        clinicaId: atualizado.clinicaId,
+        unidadeId: atualizado.unidadeId,
+        pacienteId: atualizado.pacienteId,
+        agendamentoId: atualizado.id,
+        descricao: atualizado.procedimento.nome,
+        valor: dinheiro(atualizado.valor),
+        convenioId: atualizado.convenioId,
+        particular: atualizado.particular,
+        vencimento: atualizado.data,
+      });
+    }
     res.json(montarAgendamento(atualizado));
   } catch (err) {
     next(err);

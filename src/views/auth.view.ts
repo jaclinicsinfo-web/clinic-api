@@ -3,8 +3,19 @@ import { UsuarioCompleto } from '../models/usuario.model';
 import { UsoUsuarios } from '../models/plano.model';
 import { montarPermissoes } from '../lib/permissoes';
 
-export function unidadeResumo(unidade: { id: string; nome: string; cidade: string }) {
-  return { id: unidade.id, nome: unidade.nome, cidade: unidade.cidade };
+export function unidadeResumo(unidade: { id: string; nome: string; cidade: string; ativo?: boolean }) {
+  return {
+    id: unidade.id,
+    nome: unidade.nome,
+    cidade: unidade.cidade,
+    ativo: unidade.ativo ?? true,
+  };
+}
+
+function unidadesAtivasDoUsuario(usuario: UsuarioCompleto) {
+  return usuario.usuarioUnidades
+    .filter((item) => item.unidade.ativo)
+    .map((item) => unidadeResumo(item.unidade));
 }
 
 export function planoResumo(plano: Plano) {
@@ -46,13 +57,14 @@ export function montarSessao(params: {
   uso: UsoUsuarios;
 }) {
   const { token, usuario, unidadeAtualId, uso } = params;
-  const unidades = usuario.usuarioUnidades.map((uu) => unidadeResumo(uu.unidade));
+  const unidades = unidadesAtivasDoUsuario(usuario);
 
   return {
     token,
     usuario: usuarioResumo(usuario),
     unidades,
     unidadeAtualId,
+    clinicaNome: usuario.clinica.nomeFantasia,
     perfil: perfilResumo(usuario.perfil),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
@@ -65,12 +77,13 @@ export function montarMe(params: {
   uso: UsoUsuarios;
 }) {
   const { usuario, unidadeAtualId, uso } = params;
-  const unidades = usuario.usuarioUnidades.map((uu) => unidadeResumo(uu.unidade));
+  const unidades = unidadesAtivasDoUsuario(usuario);
 
   return {
     usuario: usuarioResumo(usuario),
     unidades,
     unidadeAtualId,
+    clinicaNome: usuario.clinica.nomeFantasia,
     perfil: perfilResumo(usuario.perfil),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },

@@ -46,7 +46,8 @@ export async function login(
       );
     }
 
-    if (usuario.usuarioUnidades.length === 0) {
+    const unidadesAtivas = usuario.usuarioUnidades.filter((item) => item.unidade.ativo);
+    if (unidadesAtivas.length === 0) {
       throw new AppError(
         403,
         'Nenhuma unidade liberada para este usuário. Fale com o administrador.',
@@ -54,9 +55,7 @@ export async function login(
     }
 
     const unidadeAtualId =
-      usuario.usuarioUnidades.length === 1
-        ? usuario.usuarioUnidades[0].unidadeId
-        : null;
+      unidadesAtivas.length === 1 ? unidadesAtivas[0].unidadeId : null;
 
     const token = assinarToken(
       {
@@ -95,7 +94,7 @@ export async function selecionarUnidade(
     }
 
     const unidade = await buscarUnidadePorId(unidadeId);
-    if (!unidade) {
+    if (!unidade || !unidade.ativo) {
       throw new AppError(403, 'Você não tem acesso a esta unidade.');
     }
 
