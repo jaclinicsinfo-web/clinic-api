@@ -7,7 +7,7 @@ export interface AcoesModulo {
 
 export type Permissoes = Record<string, AcoesModulo>;
 
-const MODULOS = [
+export const MODULOS = [
   'dashboard',
   'pacientes',
   'agenda',

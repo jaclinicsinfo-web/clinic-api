@@ -1,24 +1,10 @@
 import { PerfilAcesso, Plano, Unidade } from '@prisma/client';
 import { UsuarioCompleto } from '../models/usuario.model';
 import { UsoUsuarios } from '../models/plano.model';
+import { montarPermissoes } from '../lib/permissoes';
 import { planoResumo, unidadeResumo, usuarioResumo } from './auth.view';
 
-function montarPermissoes(raw: unknown) {
-  if (Array.isArray(raw)) return raw;
-  if (!raw || typeof raw !== 'object') return [];
-
-  return Object.entries(raw as Record<string, Record<string, boolean>>).map(
-    ([modulo, acoes]) => ({
-      modulo,
-      visualizar: Boolean(acoes?.visualizar),
-      criar: Boolean(acoes?.criar),
-      editar: Boolean(acoes?.editar),
-      excluir: Boolean(acoes?.excluir),
-    }),
-  );
-}
-
-function perfilResumo(perfil: PerfilAcesso) {
+export function perfilCompleto(perfil: PerfilAcesso) {
   return {
     id: perfil.id,
     nome: perfil.nome,
@@ -45,7 +31,7 @@ export function montarListaUsuarios(params: {
 }) {
   return {
     usuarios: params.usuarios.map(usuarioResumo),
-    perfis: params.perfis.map(perfilResumo),
+    perfis: params.perfis.map(perfilCompleto),
     unidades: params.unidades.map(unidadeResumo),
     plano: planoResumo(params.plano),
     usoUsuarios: montarUso(params.uso),

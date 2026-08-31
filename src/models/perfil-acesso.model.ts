@@ -43,3 +43,13 @@ export async function buscarPorIdEClinica(
 ): Promise<PerfilAcesso | null> {
   return prisma.perfilAcesso.findFirst({ where: { id, clinicaId } });
 }
+
+export async function atualizarPermissoes(
+  id: string,
+  permissoes: Prisma.InputJsonValue,
+): Promise<PerfilAcesso> {
+  return prisma.perfilAcesso.update({
+    where: { id },
+    data: { permissoes },
+  });
+}

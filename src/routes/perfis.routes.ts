@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listar, criar, inativar, ativar } from '../controllers/usuarios.controller';
+import { atualizar, listar } from '../controllers/perfis.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { exigirAdministrador } from '../middlewares/admin.middleware';
 import { exigirPermissao } from '../middlewares/permissao.middleware';
@@ -8,8 +8,6 @@ const router = Router();
 
 router.use(autenticar);
 router.get('/', exigirPermissao('configuracoes', 'visualizar'), listar);
-router.post('/', exigirAdministrador, criar);
-router.patch('/:id/inativar', exigirAdministrador, inativar);
-router.patch('/:id/ativar', exigirAdministrador, ativar);
+router.patch('/:id', exigirAdministrador, atualizar);
 
 export default router;
