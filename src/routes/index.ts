@@ -16,6 +16,7 @@ import formasPagamentoRoutes from './formas-pagamento.routes';
 import clinicaRoutes from './clinica.routes';
 import estoqueRoutes from './estoque.routes';
 import notificacoesRoutes from './notificacoes.routes';
+import dashboardRoutes from './dashboard.routes';
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/formas-pagamento', formasPagamentoRoutes);
 router.use('/clinica', clinicaRoutes);
 router.use('/estoque', estoqueRoutes);
 router.use('/notificacoes', notificacoesRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 export default router;
