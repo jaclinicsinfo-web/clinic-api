@@ -12,8 +12,8 @@ export const atendimentoBodySchema = z
     procedimentoRealizado: z.string().trim().min(3, 'Informe o procedimento realizado.'),
     tipoRegistro: z.enum(TIPO_REGISTRO, { errorMap: () => ({ message: 'Tipo de registro inválido.' }) }),
     queixaPrincipal: textoOpcional,
-    quadroClinico: z.string().trim().min(8, 'Descreva o quadro clínico.'),
-    evolucao: z.string().trim().min(10, 'Registre a evolução com ao menos 10 caracteres.'),
+    quadroClinico: textoOpcional,
+    evolucao: textoOpcional,
     conduta: textoOpcional,
     respostaAoTratamento: z.enum(RESPOSTA_TRATAMENTO).optional().nullable(),
     escalaDor: z

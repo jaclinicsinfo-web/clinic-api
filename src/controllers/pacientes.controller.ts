@@ -386,8 +386,8 @@ export async function registrarEvolucao(
         profissionalId,
         especialidade: dados.especialidade ?? 'Clínica Geral',
         titulo: dados.titulo ?? dados.procedimentoRealizado,
-        queixaInicial: dados.queixaPrincipal ?? dados.evolucao.slice(0, 180),
-        quadroInicial: dados.quadroClinico,
+        queixaInicial: dados.queixaPrincipal ?? dados.evolucao?.slice(0, 180) ?? dados.procedimentoRealizado,
+        quadroInicial: dados.quadroClinico ?? '',
         objetivo: dados.objetivo,
         inicioEm: dataDeIso(hojeCivil()) as Date,
       });
@@ -405,7 +405,7 @@ export async function registrarEvolucao(
       tipoRegistro: dados.tipoRegistro,
       queixaPrincipal: dados.queixaPrincipal,
       quadroClinico: dados.quadroClinico,
-      evolucao: dados.evolucao,
+      evolucao: dados.evolucao ?? '',
       conduta: dados.conduta,
       respostaAoTratamento:
         dados.tipoRegistro === 'alta' ? 'resolvido' : (dados.respostaAoTratamento ?? null),
@@ -417,7 +417,7 @@ export async function registrarEvolucao(
     if (dados.tipoRegistro === 'alta' && acompanhamentoId) {
       await encerrarAcompanhamento(acompanhamentoId, {
         altaEm: dataDeIso(hojeCivil()) as Date,
-        resumoAlta: dados.quadroClinico,
+        resumoAlta: dados.quadroClinico ?? '',
       });
     }
 
