@@ -72,7 +72,7 @@ const administrador: PerfilPadrao = {
 
 const gestor: PerfilPadrao = {
   nome: 'Gestor',
-  descricao: 'Gerencia operação da clínica, sem acesso a configurações.',
+  descricao: 'Gerencia a operação da clínica e o perfil de outros usuários.',
   permissoes: comModulos({
     dashboard: acoes(true),
     pacientes: acoes(true, true, true, false),
@@ -136,4 +136,5 @@ export const PERFIS_PADRAO: PerfilPadrao[] = [
 ];
 
 export const NOME_PERFIL_ADMINISTRADOR = administrador.nome;
+export const NOME_PERFIL_GESTOR = gestor.nome;
 export const NOME_PERFIL_PROFISSIONAL_SAUDE = profissionalSaude.nome;

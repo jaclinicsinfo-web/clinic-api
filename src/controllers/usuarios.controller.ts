@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import {
+  alterarPerfilSchema,
   criarUsuarioSchema,
   usuarioIdParamSchema,
 } from '../validators/usuarios.validator';
 import {
+  alterarPerfil as persistirPerfil,
   alterarStatus,
   buscarPorEmail,
   buscarPorId,
@@ -20,7 +22,7 @@ import {
   pertencemAClinica,
 } from '../models/unidade.model';
 import { usoDaClinica } from '../models/plano.model';
-import { NOME_PERFIL_ADMINISTRADOR } from '../lib/perfis-padrao';
+import { NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_GESTOR } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
 import { montarListaUsuarios, montarUsuarioMutacao } from '../views/usuarios.view';
 
@@ -142,6 +144,70 @@ async function mudarStatus(
   const usuario = await alterarStatus(id, proximoStatus);
   const uso = await usoDaClinica(clinicaId);
   res.json(montarUsuarioMutacao({ usuario, uso }));
+}
+
+export async function atualizarPerfil(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = usuarioIdParamSchema.parse(req.params);
+    const { perfilId } = alterarPerfilSchema.parse(req.body);
+    const clinicaId = req.auth!.clinicaId;
+
+    const [ator, alvo] = await Promise.all([buscarPorId(req.auth!.sub), buscarPorId(id)]);
+
+    if (!ator || ator.status !== 'ativo') {
+      throw new AppError(401, 'Sessão expirada. Entre novamente.');
+    }
+
+    if (!alvo || alvo.clinicaId !== clinicaId) {
+      throw new AppError(404, 'Usuário não encontrado.');
+    }
+
+    if (alvo.id === ator.id) {
+      throw new AppError(400, 'Você não pode alterar o próprio perfil.');
+    }
+
+    const novoPerfil = await buscarPorIdEClinica(perfilId, clinicaId);
+    if (!novoPerfil) {
+      throw new AppError(400, 'Perfil inválido para esta clínica.');
+    }
+
+    const atorEhAdmin = ator.perfil.nome === NOME_PERFIL_ADMINISTRADOR;
+    const atorEhGestor = ator.perfil.nome === NOME_PERFIL_GESTOR;
+
+    if (!atorEhAdmin && !atorEhGestor) {
+      throw new AppError(403, 'Apenas administradores e gestores podem alterar o perfil de usuários.');
+    }
+
+    if (!atorEhAdmin) {
+      if (alvo.perfil.nome === NOME_PERFIL_ADMINISTRADOR) {
+        throw new AppError(403, 'Apenas o administrador pode alterar o perfil de outro administrador.');
+      }
+      if (novoPerfil.nome === NOME_PERFIL_ADMINISTRADOR) {
+        throw new AppError(403, 'Apenas o administrador pode atribuir o perfil Administrador.');
+      }
+    }
+
+    if (
+      alvo.perfil.nome === NOME_PERFIL_ADMINISTRADOR &&
+      novoPerfil.nome !== NOME_PERFIL_ADMINISTRADOR
+    ) {
+      const outrosAdmins = await contarAdminsAtivos(clinicaId, alvo.id);
+      if (outrosAdmins === 0) {
+        throw new AppError(400, 'Não é possível remover o último administrador da clínica.');
+      }
+    }
+
+    const usuario =
+      alvo.perfilId === perfilId ? alvo : await persistirPerfil(id, perfilId);
+    const uso = await usoDaClinica(clinicaId);
+    res.json(montarUsuarioMutacao({ usuario, uso }));
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function inativar(

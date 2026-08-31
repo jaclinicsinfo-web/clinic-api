@@ -14,4 +14,8 @@ export const usuarioIdParamSchema = z.object({
   id: z.string().uuid('Usuário inválido.'),
 });
 
+export const alterarPerfilSchema = z.object({
+  perfilId: z.string().uuid('Perfil inválido.'),
+});
+
 export type CriarUsuarioInput = z.infer<typeof criarUsuarioSchema>;

@@ -200,10 +200,12 @@ com 2+ unidades vem `null` (use `POST /auth/selecionar-unidade`).
 
 ## Gestão de usuários
 
-`GET /usuarios` lista as contas da clínica autenticada, com perfis, unidades, plano e uso.
-`POST /usuarios` cria uma conta com o `perfilId` escolhido (Gestor, Recepção, etc.) e valida o
-limite do plano. Inativar libera a vaga; reativar volta a ocupá-la. Não é possível inativar a
-própria conta nem o último Administrador.
+`GET /usuarios` lista as contas da clínica autenticada, com perfis, unidades, plano e uso
+(Administrador e Gestor). `POST /usuarios` cria uma conta com o `perfilId` escolhido
+(somente Administrador) e valida o limite do plano. `PATCH /usuarios/:id/perfil` altera o
+perfil de outro usuário (Administrador e Gestor). Inativar libera a vaga; reativar volta a
+ocupá-la. Não é possível alterar o próprio perfil, inativar a própria conta nem o último
+Administrador. Gestor não atribui o perfil Administrador nem altera a conta de um administrador.
 
 O `usuario.model.criarUsuario()` **sempre** chama `assertPodeAdicionarUsuario` antes de persistir
 um usuário ativo, retornando **403** com a mensagem

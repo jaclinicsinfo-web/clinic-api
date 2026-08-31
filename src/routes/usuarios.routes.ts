@@ -1,14 +1,14 @@
 import { Router } from 'express';
-import { listar, criar, inativar, ativar } from '../controllers/usuarios.controller';
+import { listar, criar, inativar, ativar, atualizarPerfil } from '../controllers/usuarios.controller';
 import { autenticar } from '../middlewares/auth.middleware';
-import { exigirAdministrador } from '../middlewares/admin.middleware';
-import { exigirPermissao } from '../middlewares/permissao.middleware';
+import { exigirAdministrador, exigirAdminOuGestor } from '../middlewares/admin.middleware';
 
 const router = Router();
 
 router.use(autenticar);
-router.get('/', exigirPermissao('configuracoes', 'visualizar'), listar);
+router.get('/', exigirAdminOuGestor, listar);
 router.post('/', exigirAdministrador, criar);
+router.patch('/:id/perfil', exigirAdminOuGestor, atualizarPerfil);
 router.patch('/:id/inativar', exigirAdministrador, inativar);
 router.patch('/:id/ativar', exigirAdministrador, ativar);
 

@@ -80,6 +80,19 @@ export async function listarPorClinica(clinicaId: string): Promise<UsuarioComple
   });
 }
 
+export async function alterarPerfil(
+  id: string,
+  perfilId: string,
+): Promise<UsuarioCompleto> {
+  await prisma.usuario.update({ where: { id }, data: { perfilId } });
+
+  const atualizado = await buscarPorId(id);
+  if (!atualizado) {
+    throw new AppError(404, 'Usuário não encontrado.');
+  }
+  return atualizado;
+}
+
 export async function alterarStatus(
   id: string,
   status: 'ativo' | 'inativo',
