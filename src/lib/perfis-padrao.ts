@@ -136,3 +136,4 @@ export const PERFIS_PADRAO: PerfilPadrao[] = [
 ];
 
 export const NOME_PERFIL_ADMINISTRADOR = administrador.nome;
+export const NOME_PERFIL_PROFISSIONAL_SAUDE = profissionalSaude.nome;

@@ -1,8 +1,8 @@
 # ClinicERP API
 
 API REST do **ClinicERP**, o ERP back-office para clínicas (médicas, odontológicas e estéticas).
-Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, **gestão de usuários** e o
-**catálogo de planos** com limite de contas.
+Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, **gestão de usuários**,
+**pacientes** e o **catálogo de planos** com limite de contas.
 
 > Não existe portal do paciente. Não há sign-up aberto. A primeira clínica e o administrador nascem no
 > painel (`POST /api/setup`) quando o banco está vazio. O plano vem da variável `PLANO` na API. Os
@@ -42,7 +42,7 @@ src/
   config/           env.ts, database.ts
   middlewares/      auth, admin, landing, error, rate-limit
   routes/           index, health, auth, cadastro, setup, usuarios, planos
-  models/           plano, clinica, unidade, usuario, perfil-acesso
+  models/           plano, clinica, unidade, usuario, perfil-acesso, paciente, convenio
   controllers/      health, auth, cadastro, setup, usuarios, planos
   views/            health, auth, cadastro, setup, usuarios, planos, error
   validators/       auth, cadastro, setup, usuarios
@@ -118,6 +118,12 @@ Base: `http://localhost:3001/api` · JSON · Bearer JWT.
 | POST   | `/usuarios`                 | Bearer (admin)    |
 | PATCH  | `/usuarios/:id/inativar`    | Bearer (admin)    |
 | PATCH  | `/usuarios/:id/ativar`      | Bearer (admin)    |
+| GET    | `/pacientes`                | Bearer            |
+| GET    | `/pacientes/opcoes`         | Bearer            |
+| POST   | `/pacientes`                | Bearer            |
+| GET    | `/pacientes/:id`            | Bearer            |
+| PATCH  | `/pacientes/:id`            | Bearer            |
+| PATCH  | `/pacientes/:id/arquivar`   | Bearer            |
 
 ## Exemplos com curl
 
@@ -202,3 +208,11 @@ própria conta nem o último Administrador.
 O `usuario.model.criarUsuario()` **sempre** chama `assertPodeAdicionarUsuario` antes de persistir
 um usuário ativo, retornando **403** com a mensagem
 _"Limite de usuários do plano atingido. Faça upgrade para adicionar mais contas."_ quando o plano estoura.
+
+## Pacientes
+
+`GET /pacientes` lista os pacientes da clínica, com resumo, convênios ativos e profissionais de saúde
+(usuários com esse perfil). `POST /pacientes` cadastra na unidade da sessão. CPF é único por clínica.
+
+Quem tem o perfil **Profissional de saúde** só vê e edita pacientes em que é o profissional preferido.
+Os demais perfis com permissão de visualizar veem a base inteira da clínica. Arquivar exige `editar`.

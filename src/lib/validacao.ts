@@ -35,3 +35,29 @@ export function telefoneValido(valor: string): boolean {
   if (digitos.length === 11) return primeiroDoNumero === '9';
   return primeiroDoNumero >= '2' && primeiroDoNumero <= '5';
 }
+
+export function cpfValido(valor: string): boolean {
+  const cpf = valor.replace(/\D/g, '');
+  if (cpf.length !== 11 || todosDigitosIguais(cpf)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 9; i += 1) soma += Number(cpf[i]) * (10 - i);
+  let d1 = (soma * 10) % 11;
+  if (d1 === 10) d1 = 0;
+  if (d1 !== Number(cpf[9])) return false;
+
+  soma = 0;
+  for (let i = 0; i < 10; i += 1) soma += Number(cpf[i]) * (11 - i);
+  let d2 = (soma * 10) % 11;
+  if (d2 === 10) d2 = 0;
+  return d2 === Number(cpf[10]);
+}
+
+export function cepValido(valor: string): boolean {
+  const digitos = valor.replace(/\D/g, '');
+  return digitos.length === 8 && !todosDigitosIguais(digitos);
+}
+
+export function apenasDigitos(valor: string): string {
+  return valor.replace(/\D/g, '');
+}

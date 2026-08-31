@@ -1,7 +1,7 @@
 import { Prisma, Usuario, PrismaClient } from '@prisma/client';
 import { prisma } from '../config/database';
 import { gerarHash } from '../lib/password';
-import { NOME_PERFIL_ADMINISTRADOR } from '../lib/perfis-padrao';
+import { NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_PROFISSIONAL_SAUDE } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
 import { assertPodeAdicionarUsuario } from './plano.model';
 
@@ -130,4 +130,32 @@ export async function possuiAcessoUnidade(
     where: { usuarioId_unidadeId: { usuarioId, unidadeId } },
   });
   return vinculo !== null;
+}
+
+export async function listarProfissionaisSaude(clinicaId: string) {
+  return prisma.usuario.findMany({
+    where: {
+      clinicaId,
+      status: 'ativo',
+      perfil: { nome: NOME_PERFIL_PROFISSIONAL_SAUDE },
+    },
+    select: { id: true, nome: true },
+    orderBy: { nome: 'asc' },
+  });
+}
+
+export async function ehProfissionalSaudeDaClinica(
+  usuarioId: string,
+  clinicaId: string,
+): Promise<boolean> {
+  const usuario = await prisma.usuario.findFirst({
+    where: {
+      id: usuarioId,
+      clinicaId,
+      status: 'ativo',
+      perfil: { nome: NOME_PERFIL_PROFISSIONAL_SAUDE },
+    },
+    select: { id: true },
+  });
+  return usuario !== null;
 }

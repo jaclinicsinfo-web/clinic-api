@@ -6,6 +6,7 @@ import cadastroRoutes from './cadastro.routes';
 import setupRoutes from './setup.routes';
 import usuariosRoutes from './usuarios.routes';
 import perfisRoutes from './perfis.routes';
+import pacientesRoutes from './pacientes.routes';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/cadastro', cadastroRoutes);
 router.use('/setup', setupRoutes);
 router.use('/usuarios', usuariosRoutes);
 router.use('/perfis', perfisRoutes);
+router.use('/pacientes', pacientesRoutes);
 
 export default router;

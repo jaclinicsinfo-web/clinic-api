@@ -50,6 +50,10 @@ export function tratarErros(
         res.status(409).json(montarErro('Já existe uma conta com este e-mail.'));
         return;
       }
+      if (alvo.includes('cpf')) {
+        res.status(409).json(montarErro('Já existe um paciente com este CPF nesta clínica.'));
+        return;
+      }
       res.status(409).json(montarErro('Registro já existente.'));
       return;
     }
