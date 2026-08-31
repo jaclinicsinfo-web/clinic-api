@@ -17,6 +17,7 @@ import clinicaRoutes from './clinica.routes';
 import estoqueRoutes from './estoque.routes';
 import notificacoesRoutes from './notificacoes.routes';
 import dashboardRoutes from './dashboard.routes';
+import relatoriosRoutes from './relatorios.routes';
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use('/clinica', clinicaRoutes);
 router.use('/estoque', estoqueRoutes);
 router.use('/notificacoes', notificacoesRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/relatorios', relatoriosRoutes);
 
 export default router;
