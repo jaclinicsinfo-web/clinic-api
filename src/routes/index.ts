@@ -14,6 +14,8 @@ import agendaRoutes from './agenda.routes';
 import financeiroRoutes from './financeiro.routes';
 import formasPagamentoRoutes from './formas-pagamento.routes';
 import clinicaRoutes from './clinica.routes';
+import estoqueRoutes from './estoque.routes';
+import notificacoesRoutes from './notificacoes.routes';
 
 const router = Router();
 
@@ -32,5 +34,7 @@ router.use('/agenda', agendaRoutes);
 router.use('/financeiro', financeiroRoutes);
 router.use('/formas-pagamento', formasPagamentoRoutes);
 router.use('/clinica', clinicaRoutes);
+router.use('/estoque', estoqueRoutes);
+router.use('/notificacoes', notificacoesRoutes);
 
 export default router;

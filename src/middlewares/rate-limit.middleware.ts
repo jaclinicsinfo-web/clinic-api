@@ -29,3 +29,8 @@ export const limiteSetup = criarLimiter(
   5,
   'Muitas tentativas de configuração inicial. Tente novamente em alguns minutos.',
 );
+
+export const limiteRecuperacao = criarLimiter(
+  5,
+  'Muitas tentativas de recuperação de senha. Tente novamente em alguns minutos.',
+);

@@ -58,6 +58,12 @@ export const env = {
   PLANO: planoDaClinica(),
 
   LANDING_API_KEY: requerido('LANDING_API_KEY', process.env.LANDING_API_KEY),
+
+  SMTP_HOST: process.env.SMTP_HOST?.trim() || '',
+  SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),
+  SMTP_USER: process.env.SMTP_USER?.trim() || '',
+  SMTP_PASS: process.env.SMTP_PASS ?? '',
+  SMTP_FROM: process.env.SMTP_FROM?.trim() || '',
 } as const;
 
 export const isDev = env.NODE_ENV === 'development';

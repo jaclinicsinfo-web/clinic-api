@@ -56,11 +56,14 @@ model Clinica {
   atendimentos        Atendimento[]
   documentosPaciente  DocumentoPaciente[]
   logsProntuario      LogAcessoProntuario[]
-  formasPagamento     FormaPagamento[]
-  cobrancas           Cobranca[]
-  despesas            Despesa[]
-  lotesConvenio       LoteConvenio[]
-  comissoes           Comissao[]
+  formasPagamento      FormaPagamento[]
+  cobrancas            Cobranca[]
+  despesas             Despesa[]
+  lotesConvenio        LoteConvenio[]
+  comissoes            Comissao[]
+  produtosEstoque      ProdutoEstoque[]
+  movimentacoesEstoque MovimentacaoEstoque[]
+  notificacoes         Notificacao[]
 
   @@map("clinicas")
 }
@@ -77,8 +80,9 @@ model Unidade {
   pacientes       Paciente[]
   agendamentos    Agendamento[]
   listaEspera     ListaEsperaItem[]
-  cobrancas       Cobranca[]
-  despesas        Despesa[]
+  cobrancas            Cobranca[]
+  despesas             Despesa[]
+  movimentacoesEstoque MovimentacaoEstoque[]
 
   @@map("unidades")
 }
@@ -115,8 +119,11 @@ model Usuario {
   profissional        Profissional?
   agendamentosCriados Agendamento[]        @relation("AgendamentoCriadoPor")
   atendimentosCriados Atendimento[]        @relation("AtendimentoCriadoPor")
-  documentosEnviados  DocumentoPaciente[]  @relation("DocumentoCriadoPor")
-  logsProntuario      LogAcessoProntuario[]
+  documentosEnviados      DocumentoPaciente[]     @relation("DocumentoCriadoPor")
+  logsProntuario          LogAcessoProntuario[]
+  recuperacoesSenha       RecuperacaoSenha[]
+  notificacoes            Notificacao[]
+  movimentacoesEstoque    MovimentacaoEstoque[]
 
   @@map("usuarios")
 }
@@ -171,9 +178,10 @@ model Procedimento {
 
   clinica         Clinica                     @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   valoresConvenio ConvenioProcedimento[]
-  profissionais   ProfissionalProcedimento[]
-  agendamentos    Agendamento[]
-  listaEspera     ListaEsperaItem[]
+  profissionais        ProfissionalProcedimento[]
+  agendamentos         Agendamento[]
+  listaEspera          ListaEsperaItem[]
+  movimentacoesEstoque MovimentacaoEstoque[]
 
   @@unique([clinicaId, nome])
   @@index([clinicaId, status])
@@ -631,4 +639,85 @@ model Comissao {
   @@unique([clinicaId, profissionalId, competencia])
   @@index([clinicaId, competencia])
   @@map("comissoes")
+}
+
+model ProdutoEstoque {
+  id               String   @id @default(uuid()) @db.Uuid
+  clinicaId        String   @db.Uuid
+  nome             String
+  categoria        String
+  unidadeMedida    String
+  quantidadeAtual  Decimal  @default(0) @db.Decimal(12, 2)
+  estoqueMinimo    Decimal  @db.Decimal(12, 2)
+  custoUnitario    Decimal  @db.Decimal(12, 2)
+  fornecedor       String
+  ativo            Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+
+  clinica       Clinica                 @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  movimentacoes MovimentacaoEstoque[]
+
+  @@unique([clinicaId, nome])
+  @@index([clinicaId, ativo])
+  @@map("produtos_estoque")
+}
+
+model MovimentacaoEstoque {
+  id             String   @id @default(uuid()) @db.Uuid
+  clinicaId      String   @db.Uuid
+  unidadeId      String   @db.Uuid
+  produtoId      String   @db.Uuid
+  tipo           String
+  quantidade     Decimal  @db.Decimal(12, 2)
+  motivo         String
+  procedimentoId String?  @db.Uuid
+  usuarioId      String   @db.Uuid
+  data           DateTime @db.Date
+  criadoEm       DateTime @default(now())
+
+  clinica      Clinica         @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade      Unidade         @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  produto      ProdutoEstoque  @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  procedimento Procedimento?   @relation(fields: [procedimentoId], references: [id], onDelete: SetNull)
+  usuario      Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([clinicaId, data])
+  @@index([produtoId])
+  @@map("movimentacoes_estoque")
+}
+
+model RecuperacaoSenha {
+  id        String    @id @default(uuid()) @db.Uuid
+  usuarioId String    @db.Uuid
+  tokenHash String    @unique
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  criadoEm  DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("recuperacoes_senha")
+}
+
+model Notificacao {
+  id         String    @id @default(uuid()) @db.Uuid
+  clinicaId  String    @db.Uuid
+  usuarioId  String    @db.Uuid
+  chave      String
+  tipo       String
+  titulo     String
+  descricao  String
+  href       String?
+  severidade String    @default("media")
+  lidaEm     DateTime?
+  criadoEm   DateTime  @default(now())
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, chave])
+  @@index([usuarioId, lidaEm, criadoEm])
+  @@map("notificacoes")
 }

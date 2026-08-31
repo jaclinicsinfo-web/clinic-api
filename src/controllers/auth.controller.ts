@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import {
   loginSchema,
+  recuperarSenhaSchema,
+  redefinirSenhaSchema,
   selecionarUnidadeSchema,
 } from '../validators/auth.validator';
 import {
@@ -9,10 +11,13 @@ import {
   registrarAcesso,
   possuiAcessoUnidade,
 } from '../models/usuario.model';
+import { criarRecuperacao, redefinirComToken } from '../models/recuperacao-senha.model';
 import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
 import { usoDaClinica } from '../models/plano.model';
 import { assinarToken } from '../lib/jwt';
 import { conferirSenha } from '../lib/password';
+import { enviarEmail } from '../lib/email';
+import { env } from '../config/env';
 import { AppError } from '../lib/erros';
 import {
   montarSessao,
@@ -136,4 +141,52 @@ export async function me(
 
 export function logout(_req: Request, res: Response): void {
   res.json(montarLogout());
+}
+
+const MENSAGEM_RECUPERACAO =
+  'Se este e-mail estiver cadastrado, enviaremos um link para redefinir a senha.';
+
+export async function solicitarRecuperacao(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { email } = recuperarSenhaSchema.parse(req.body);
+    const usuario = await buscarPorEmail(email);
+
+    if (usuario && usuario.status === 'ativo') {
+      const token = await criarRecuperacao(usuario.id);
+      const link = `${env.FRONTEND_URL.replace(/\/+$/, '')}/redefinir-senha?token=${token}`;
+
+      await enviarEmail({
+        para: usuario.email,
+        assunto: 'Redefinição de senha — J.A. Clinics',
+        texto: `Olá, ${usuario.nome}. Use este link para redefinir sua senha (válido por 1 hora):\n${link}`,
+        html: `<p>Olá, ${usuario.nome}.</p><p>Use o link abaixo para redefinir sua senha. Ele vale por 1 hora.</p><p><a href="${link}">${link}</a></p><p>Se você não pediu isso, ignore este e-mail.</p>`,
+      });
+    }
+
+    res.json({ mensagem: MENSAGEM_RECUPERACAO });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function redefinirSenha(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { token, senha } = redefinirSenhaSchema.parse(req.body);
+    const usuarioId = await redefinirComToken(token, senha);
+    if (!usuarioId) {
+      throw new AppError(400, 'Este link é inválido ou já expirou. Solicite uma nova recuperação.');
+    }
+
+    res.json({ mensagem: 'Senha redefinida. Entre com a nova senha.' });
+  } catch (err) {
+    next(err);
+  }
 }
