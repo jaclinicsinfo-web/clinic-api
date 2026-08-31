@@ -8,15 +8,15 @@ datasource db {
 }
 
 model Plano {
-  id             String    @id @default(uuid()) @db.Uuid
-  codigo         String    @unique
+  id             String   @id @default(uuid()) @db.Uuid
+  codigo         String   @unique
   nome           String
   limiteUsuarios Int?
-  ativo          Boolean   @default(true)
-  criadoEm       DateTime  @default(now())
-  atualizadoEm   DateTime  @updatedAt
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
 
-  clinicas       Clinica[]
+  clinicas Clinica[]
 
   @@map("planos")
 }
@@ -32,12 +32,21 @@ model Clinica {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  plano         Plano          @relation(fields: [planoId], references: [id])
-  unidades      Unidade[]
-  perfisAcesso  PerfilAcesso[]
-  usuarios      Usuario[]
-  convenios     Convenio[]
-  pacientes     Paciente[]
+  plano               Plano                    @relation(fields: [planoId], references: [id])
+  unidades            Unidade[]
+  perfisAcesso        PerfilAcesso[]
+  usuarios            Usuario[]
+  convenios           Convenio[]
+  pacientes           Paciente[]
+  procedimentos       Procedimento[]
+  profissionais       Profissional[]
+  agendamentos        Agendamento[]
+  bloqueiosAgenda     BloqueioAgenda[]
+  listaEspera         ListaEsperaItem[]
+  acompanhamentos     AcompanhamentoClinico[]
+  atendimentos        Atendimento[]
+  documentosPaciente  DocumentoPaciente[]
+  logsProntuario      LogAcessoProntuario[]
 
   @@map("clinicas")
 }
@@ -52,17 +61,19 @@ model Unidade {
   clinica         Clinica          @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   usuarioUnidades UsuarioUnidade[]
   pacientes       Paciente[]
+  agendamentos    Agendamento[]
+  listaEspera     ListaEsperaItem[]
 
   @@map("unidades")
 }
 
 model PerfilAcesso {
-  id          String  @id @default(uuid()) @db.Uuid
-  clinicaId   String  @db.Uuid
-  nome        String
-  descricao   String
-  sistema     Boolean @default(false)
-  permissoes  Json
+  id         String  @id @default(uuid()) @db.Uuid
+  clinicaId  String  @db.Uuid
+  nome       String
+  descricao  String
+  sistema    Boolean @default(false)
+  permissoes Json
 
   clinica  Clinica   @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   usuarios Usuario[]
@@ -82,10 +93,14 @@ model Usuario {
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 
-  clinica              Clinica          @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  perfil               PerfilAcesso     @relation(fields: [perfilId], references: [id])
-  usuarioUnidades      UsuarioUnidade[]
-  pacientesPreferidos  Paciente[]       @relation("PacienteProfissionalPreferido")
+  clinica             Clinica              @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  perfil              PerfilAcesso         @relation(fields: [perfilId], references: [id])
+  usuarioUnidades     UsuarioUnidade[]
+  profissional        Profissional?
+  agendamentosCriados Agendamento[]        @relation("AgendamentoCriadoPor")
+  atendimentosCriados Atendimento[]        @relation("AtendimentoCriadoPor")
+  documentosEnviados  DocumentoPaciente[]  @relation("DocumentoCriadoPor")
+  logsProntuario      LogAcessoProntuario[]
 
   @@map("usuarios")
 }
@@ -102,19 +117,123 @@ model UsuarioUnidade {
 }
 
 model Convenio {
-  id           String   @id @default(uuid()) @db.Uuid
-  clinicaId    String   @db.Uuid
-  nome         String
-  status       String   @default("ativo")
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  id                     String   @id @default(uuid()) @db.Uuid
+  clinicaId              String   @db.Uuid
+  nome                   String
+  registroAns            String?
+  prazoPagamentoDias     Int      @default(30)
+  exigeAutorizacaoPrevia Boolean  @default(false)
+  contatoNome            String   @default("")
+  contatoTelefone        String   @default("")
+  portalUrl              String?
+  status                 String   @default("ativo")
+  criadoEm               DateTime @default(now())
+  atualizadoEm           DateTime @updatedAt
 
-  clinica   Clinica    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  pacientes Paciente[]
+  clinica      Clinica                @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  pacientes    Paciente[]
+  tabelaPrecos ConvenioProcedimento[]
+  agendamentos Agendamento[]
 
   @@unique([clinicaId, nome])
   @@index([clinicaId, status])
   @@map("convenios")
+}
+
+model Procedimento {
+  id               String   @id @default(uuid()) @db.Uuid
+  clinicaId        String   @db.Uuid
+  nome             String
+  categoria        String
+  duracaoPadraoMin Int
+  valorParticular  Decimal  @db.Decimal(12, 2)
+  status           String   @default("ativo")
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+
+  clinica         Clinica                     @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  valoresConvenio ConvenioProcedimento[]
+  profissionais   ProfissionalProcedimento[]
+  agendamentos    Agendamento[]
+  listaEspera     ListaEsperaItem[]
+
+  @@unique([clinicaId, nome])
+  @@index([clinicaId, status])
+  @@map("procedimentos")
+}
+
+model ConvenioProcedimento {
+  convenioId     String  @db.Uuid
+  procedimentoId String  @db.Uuid
+  valor          Decimal @db.Decimal(12, 2)
+
+  convenio     Convenio     @relation(fields: [convenioId], references: [id], onDelete: Cascade)
+  procedimento Procedimento @relation(fields: [procedimentoId], references: [id], onDelete: Cascade)
+
+  @@id([convenioId, procedimentoId])
+  @@map("convenio_procedimentos")
+}
+
+model Profissional {
+  id                      String   @id @default(uuid()) @db.Uuid
+  clinicaId               String   @db.Uuid
+  usuarioId               String?  @unique @db.Uuid
+  nome                    String
+  cpf                     String
+  rg                      String?
+  email                   String
+  telefone                String
+  fotoUrl                 String?
+  especialidades          String[]
+  conselho                String
+  registroConselho        String
+  tipoVinculo             String
+  formaRemuneracao        String
+  dataAdmissao            DateTime @db.Date
+  percentualComissao      Decimal  @default(0) @db.Decimal(5, 2)
+  comissaoPorProcedimento Boolean  @default(false)
+  status                  String   @default("ativo")
+  criadoEm                DateTime @default(now())
+  atualizadoEm            DateTime @updatedAt
+
+  clinica             Clinica                    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  usuario             Usuario?                   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  procedimentos       ProfissionalProcedimento[]
+  gradeHorarios       ProfissionalHorario[]
+  pacientesPreferidos Paciente[]                 @relation("PacienteProfissionalPreferido")
+  agendamentos        Agendamento[]
+  bloqueios           BloqueioAgenda[]
+  listaEspera         ListaEsperaItem[]
+  acompanhamentos     AcompanhamentoClinico[]
+  atendimentos        Atendimento[]
+
+  @@unique([clinicaId, cpf])
+  @@index([clinicaId, status])
+  @@map("profissionais")
+}
+
+model ProfissionalHorario {
+  id             String @id @default(uuid()) @db.Uuid
+  profissionalId String @db.Uuid
+  diaSemana      Int
+  horaInicio     String
+  horaFim        String
+
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@unique([profissionalId, diaSemana])
+  @@map("profissional_horarios")
+}
+
+model ProfissionalProcedimento {
+  profissionalId String @db.Uuid
+  procedimentoId String @db.Uuid
+
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+  procedimento Procedimento @relation(fields: [procedimentoId], references: [id], onDelete: Cascade)
+
+  @@id([profissionalId, procedimentoId])
+  @@map("profissional_procedimentos")
 }
 
 model Paciente {
@@ -157,10 +276,16 @@ model Paciente {
   criadoEm                DateTime  @default(now())
   atualizadoEm            DateTime  @updatedAt
 
-  clinica               Clinica  @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  unidade               Unidade  @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
-  convenio              Convenio? @relation(fields: [convenioId], references: [id], onDelete: SetNull)
-  profissionalPreferido Usuario?  @relation("PacienteProfissionalPreferido", fields: [profissionalPreferidoId], references: [id], onDelete: SetNull)
+  clinica               Clinica                 @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade               Unidade                 @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  convenio              Convenio?               @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  profissionalPreferido Profissional?           @relation("PacienteProfissionalPreferido", fields: [profissionalPreferidoId], references: [id], onDelete: SetNull)
+  agendamentos          Agendamento[]
+  listaEspera           ListaEsperaItem[]
+  acompanhamentos       AcompanhamentoClinico[]
+  atendimentos          Atendimento[]
+  documentos            DocumentoPaciente[]
+  logsProntuario        LogAcessoProntuario[]
 
   @@unique([clinicaId, cpf])
   @@index([clinicaId, unidadeId])
@@ -168,4 +293,177 @@ model Paciente {
   @@index([clinicaId, status])
   @@index([clinicaId, nome])
   @@map("pacientes")
+}
+
+model Agendamento {
+  id              String   @id @default(uuid()) @db.Uuid
+  clinicaId       String   @db.Uuid
+  unidadeId       String   @db.Uuid
+  pacienteId      String   @db.Uuid
+  profissionalId  String   @db.Uuid
+  procedimentoId  String   @db.Uuid
+  data            DateTime @db.Date
+  horaInicio      String
+  horaFim         String
+  sala            String?
+  convenioId      String?  @db.Uuid
+  particular      Boolean
+  valor           Decimal  @db.Decimal(12, 2)
+  status          String
+  observacoes     String?
+  lembreteEnviado Boolean  @default(false)
+  criadoPorId     String   @db.Uuid
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+
+  clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade      Unidade       @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
+  profissional Profissional  @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  procedimento Procedimento  @relation(fields: [procedimentoId], references: [id], onDelete: Restrict)
+  convenio     Convenio?     @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  criadoPor    Usuario       @relation("AgendamentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+  atendimento  Atendimento?
+
+  @@index([clinicaId, data])
+  @@index([clinicaId, profissionalId, data])
+  @@index([clinicaId, pacienteId])
+  @@index([clinicaId, status])
+  @@map("agendamentos")
+}
+
+model BloqueioAgenda {
+  id             String   @id @default(uuid()) @db.Uuid
+  clinicaId      String   @db.Uuid
+  profissionalId String   @db.Uuid
+  data           DateTime @db.Date
+  horaInicio     String
+  horaFim        String
+  motivo         String
+  criadoEm       DateTime @default(now())
+
+  clinica      Clinica      @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@index([clinicaId, profissionalId, data])
+  @@map("bloqueios_agenda")
+}
+
+model ListaEsperaItem {
+  id                 String   @id @default(uuid()) @db.Uuid
+  clinicaId          String   @db.Uuid
+  unidadeId          String   @db.Uuid
+  pacienteId         String   @db.Uuid
+  profissionalId     String?  @db.Uuid
+  procedimentoId     String?  @db.Uuid
+  preferenciaPeriodo String
+  status             String   @default("aguardando")
+  criadoEm           DateTime @default(now())
+
+  clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade      Unidade       @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  profissional Profissional? @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
+  procedimento Procedimento? @relation(fields: [procedimentoId], references: [id], onDelete: SetNull)
+
+  @@index([clinicaId, status])
+  @@map("lista_espera")
+}
+
+model AcompanhamentoClinico {
+  id             String    @id @default(uuid()) @db.Uuid
+  clinicaId      String    @db.Uuid
+  pacienteId     String    @db.Uuid
+  profissionalId String    @db.Uuid
+  especialidade  String
+  titulo         String
+  queixaInicial  String
+  quadroInicial  String
+  objetivo       String?
+  status         String    @default("em_andamento")
+  inicioEm       DateTime  @db.Date
+  altaEm         DateTime? @db.Date
+  resumoAlta     String?
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  clinica      Clinica      @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  paciente     Paciente     @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  profissional Profissional @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  atendimentos Atendimento[]
+
+  @@index([clinicaId, pacienteId])
+  @@map("acompanhamentos_clinicos")
+}
+
+model Atendimento {
+  id                     String    @id @default(uuid()) @db.Uuid
+  clinicaId              String    @db.Uuid
+  agendamentoId          String?   @unique @db.Uuid
+  acompanhamentoId       String?   @db.Uuid
+  pacienteId             String    @db.Uuid
+  profissionalId         String    @db.Uuid
+  data                   DateTime  @db.Date
+  procedimentoRealizado  String
+  tipoRegistro           String
+  queixaPrincipal        String?
+  quadroClinico          String?
+  evolucao               String
+  conduta                String?
+  respostaAoTratamento   String?
+  escalaDor              Int?
+  proximoRetornoSugerido DateTime? @db.Date
+  criadoPorId            String    @db.Uuid
+  criadoEm               DateTime  @default(now())
+
+  clinica        Clinica                 @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  agendamento    Agendamento?            @relation(fields: [agendamentoId], references: [id], onDelete: SetNull)
+  acompanhamento AcompanhamentoClinico?  @relation(fields: [acompanhamentoId], references: [id], onDelete: SetNull)
+  paciente       Paciente                @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  profissional   Profissional            @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  criadoPor      Usuario                 @relation("AtendimentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+  anexos         DocumentoPaciente[]
+
+  @@index([clinicaId, pacienteId])
+  @@index([acompanhamentoId])
+  @@map("atendimentos")
+}
+
+model DocumentoPaciente {
+  id            String   @id @default(uuid()) @db.Uuid
+  clinicaId     String   @db.Uuid
+  pacienteId    String   @db.Uuid
+  atendimentoId String?  @db.Uuid
+  nome          String
+  tipo          String
+  origem        String
+  mimeType      String
+  tamanhoKb     Int
+  conteudo      Bytes
+  criadoPorId   String   @db.Uuid
+  criadoEm      DateTime @default(now())
+
+  clinica     Clinica      @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  paciente    Paciente     @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  atendimento Atendimento? @relation(fields: [atendimentoId], references: [id], onDelete: SetNull)
+  criadoPor   Usuario      @relation("DocumentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+
+  @@index([clinicaId, pacienteId])
+  @@map("documentos_paciente")
+}
+
+model LogAcessoProntuario {
+  id         String   @id @default(uuid()) @db.Uuid
+  clinicaId  String   @db.Uuid
+  pacienteId String   @db.Uuid
+  usuarioId  String   @db.Uuid
+  acao       String
+  criadoEm   DateTime @default(now())
+
+  clinica  Clinica  @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([clinicaId, pacienteId, criadoEm])
+  @@map("logs_acesso_prontuario")
 }

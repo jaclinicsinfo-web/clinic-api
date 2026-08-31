@@ -14,7 +14,7 @@ export type PacienteCompleto = Prisma.PacienteGetPayload<{
 
 export interface FiltroListagemPacientes {
   clinicaId: string;
-  profissionalPreferidoId?: string;
+  profissionalId?: string;
 }
 
 export interface DadosPaciente {
@@ -59,11 +59,44 @@ export async function listar(filtro: FiltroListagemPacientes): Promise<PacienteC
   return prisma.paciente.findMany({
     where: {
       clinicaId: filtro.clinicaId,
-      ...(filtro.profissionalPreferidoId
-        ? { profissionalPreferidoId: filtro.profissionalPreferidoId }
+      ...(filtro.profissionalId
+        ? {
+            OR: [
+              { profissionalPreferidoId: filtro.profissionalId },
+              { agendamentos: { some: { profissionalId: filtro.profissionalId } } },
+            ],
+          }
         : {}),
     },
     include: incluirRelacoes,
+    orderBy: { nome: 'asc' },
+  });
+}
+
+export async function listarResumoAgenda(clinicaId: string, profissionalId?: string) {
+  return prisma.paciente.findMany({
+    where: {
+      clinicaId,
+      status: { not: 'arquivado' },
+      ...(profissionalId
+        ? {
+            OR: [
+              { profissionalPreferidoId: profissionalId },
+              { agendamentos: { some: { profissionalId } } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      nome: true,
+      telefone: true,
+      cpf: true,
+      dataNascimento: true,
+      convenioId: true,
+      alergias: true,
+      status: true,
+    },
     orderBy: { nome: 'asc' },
   });
 }

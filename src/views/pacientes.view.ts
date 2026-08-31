@@ -17,7 +17,10 @@ export function profissionalResumo(profissional: { id: string; nome: string }) {
   return { id: profissional.id, nome: profissional.nome };
 }
 
-export function pacienteResumo(paciente: PacienteCompleto) {
+export function pacienteResumo(
+  paciente: PacienteCompleto,
+  agenda?: { ultimoAtendimento: string | null; proximoAgendamento: string | null },
+) {
   const responsavel = paciente.responsavelNome
     ? {
         nome: paciente.responsavelNome,
@@ -63,8 +66,8 @@ export function pacienteResumo(paciente: PacienteCompleto) {
     consentimentoLgpd: paciente.consentimentoLgpd,
     autorizacaoImagem: paciente.autorizacaoImagem,
     status: paciente.status,
-    ultimoAtendimento: null as string | null,
-    proximoAgendamento: null as string | null,
+    ultimoAtendimento: agenda?.ultimoAtendimento ?? null,
+    proximoAgendamento: agenda?.proximoAgendamento ?? null,
     saldoDevedor: 0,
     criadoEm: paciente.criadoEm.toISOString(),
     atualizadoEm: paciente.atualizadoEm.toISOString(),
@@ -87,8 +90,11 @@ export function montarListaPacientes(params: {
   convenios: { id: string; nome: string }[];
   profissionais: { id: string; nome: string }[];
   somenteProprios: boolean;
+  agendaPorPaciente?: Map<string, { ultimoAtendimento: string | null; proximoAgendamento: string | null }>;
 }) {
-  const pacientes = params.pacientes.map(pacienteResumo);
+  const pacientes = params.pacientes.map((paciente) =>
+    pacienteResumo(paciente, params.agendaPorPaciente?.get(paciente.id)),
+  );
   return {
     pacientes,
     resumo: resumoPacientes(pacientes),
@@ -112,14 +118,26 @@ export function montarPaciente(paciente: PacienteCompleto) {
   return { paciente: pacienteResumo(paciente) };
 }
 
-export function montarDetalhePaciente(paciente: PacienteCompleto) {
+export function montarDetalhePaciente(params: {
+  paciente: PacienteCompleto;
+  agenda?: { ultimoAtendimento: string | null; proximoAgendamento: string | null };
+  proximosAgendamentos: unknown[];
+  atendimentos: unknown[];
+  acompanhamentos: unknown[];
+  agendamentos: unknown[];
+  documentos: unknown[];
+  podeVerProntuario: boolean;
+  podeRegistrarProntuario: boolean;
+}) {
   return {
-    paciente: pacienteResumo(paciente),
-    proximosAgendamentos: [],
-    atendimentos: [],
-    acompanhamentos: [],
-    agendamentos: [],
+    paciente: pacienteResumo(params.paciente, params.agenda),
+    proximosAgendamentos: params.proximosAgendamentos,
+    atendimentos: params.atendimentos,
+    acompanhamentos: params.acompanhamentos,
+    agendamentos: params.agendamentos,
     cobrancas: [],
-    documentos: [],
+    documentos: params.documentos,
+    podeVerProntuario: params.podeVerProntuario,
+    podeRegistrarProntuario: params.podeRegistrarProntuario,
   };
 }

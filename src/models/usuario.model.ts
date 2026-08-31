@@ -132,30 +132,27 @@ export async function possuiAcessoUnidade(
   return vinculo !== null;
 }
 
-export async function listarProfissionaisSaude(clinicaId: string) {
+export async function listarUsuariosSaude(clinicaId: string, excetoUsuarioId?: string) {
   return prisma.usuario.findMany({
     where: {
       clinicaId,
       status: 'ativo',
       perfil: { nome: NOME_PERFIL_PROFISSIONAL_SAUDE },
+      ...(excetoUsuarioId ? { id: { not: excetoUsuarioId } } : {}),
     },
-    select: { id: true, nome: true },
+    select: {
+      id: true,
+      nome: true,
+      email: true,
+      profissional: { select: { id: true } },
+    },
     orderBy: { nome: 'asc' },
   });
 }
 
-export async function ehProfissionalSaudeDaClinica(
-  usuarioId: string,
-  clinicaId: string,
-): Promise<boolean> {
-  const usuario = await prisma.usuario.findFirst({
-    where: {
-      id: usuarioId,
-      clinicaId,
-      status: 'ativo',
-      perfil: { nome: NOME_PERFIL_PROFISSIONAL_SAUDE },
-    },
-    select: { id: true },
+export async function buscarUsuarioDaClinica(id: string, clinicaId: string) {
+  return prisma.usuario.findFirst({
+    where: { id, clinicaId, status: 'ativo' },
+    select: { id: true, nome: true, email: true, perfil: { select: { nome: true } } },
   });
-  return usuario !== null;
 }

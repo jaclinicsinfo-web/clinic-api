@@ -7,6 +7,10 @@ import setupRoutes from './setup.routes';
 import usuariosRoutes from './usuarios.routes';
 import perfisRoutes from './perfis.routes';
 import pacientesRoutes from './pacientes.routes';
+import conveniosRoutes from './convenios.routes';
+import procedimentosRoutes from './procedimentos.routes';
+import profissionaisRoutes from './profissionais.routes';
+import agendaRoutes from './agenda.routes';
 
 const router = Router();
 
@@ -18,5 +22,9 @@ router.use('/setup', setupRoutes);
 router.use('/usuarios', usuariosRoutes);
 router.use('/perfis', perfisRoutes);
 router.use('/pacientes', pacientesRoutes);
+router.use('/convenios', conveniosRoutes);
+router.use('/procedimentos', procedimentosRoutes);
+router.use('/profissionais', profissionaisRoutes);
+router.use('/agenda', agendaRoutes);
 
 export default router;

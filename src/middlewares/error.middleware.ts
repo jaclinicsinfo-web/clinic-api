@@ -40,6 +40,10 @@ export function tratarErros(
       res.status(503).json(montarErro('Banco de dados indisponível.'));
       return;
     }
+    if (err.code === 'P2003') {
+      res.status(400).json(montarErro('Registro relacionado inválido.'));
+      return;
+    }
     if (err.code === 'P2002') {
       const alvo = (err.meta?.target as string[] | undefined)?.join(',') ?? '';
       if (alvo.includes('cnpj')) {
@@ -51,7 +55,15 @@ export function tratarErros(
         return;
       }
       if (alvo.includes('cpf')) {
-        res.status(409).json(montarErro('Já existe um paciente com este CPF nesta clínica.'));
+        res.status(409).json(montarErro('Já existe um cadastro com este CPF nesta clínica.'));
+        return;
+      }
+      if (alvo.includes('nome')) {
+        res.status(409).json(montarErro('Já existe um registro com este nome nesta clínica.'));
+        return;
+      }
+      if (alvo.includes('usuarioId')) {
+        res.status(409).json(montarErro('Esta conta de login já está vinculada a outro profissional.'));
         return;
       }
       res.status(409).json(montarErro('Registro já existente.'));
