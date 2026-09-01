@@ -25,7 +25,7 @@ export async function listarNotificacoes(req: Request, res: Response, next: Next
     await sincronizarOperacionais({
       clinicaId: usuario.clinicaId,
       usuarioId: usuario.id,
-      permissoes: permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo),
+      permissoes: permissoesEfetivas(usuario.perfil),
     });
 
     const notificacoes = await listarDoUsuario(usuario.id);

@@ -13,7 +13,7 @@ import {
 } from '../models/usuario.model';
 import { criarRecuperacao, redefinirComToken } from '../models/recuperacao-senha.model';
 import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
-import { usoDaClinica } from '../models/plano.model';
+import { usoDaClinica, sincronizarPlanoDoDeploy } from '../models/plano.model';
 import { assinarToken } from '../lib/jwt';
 import { conferirSenha } from '../lib/password';
 import { enviarEmail } from '../lib/email';
@@ -76,9 +76,15 @@ export async function login(
     await registrarAcesso(usuario.id);
     usuario.ultimoAcesso = new Date();
 
-    const uso = await usoDaClinica(usuario.clinicaId);
+    await sincronizarPlanoDoDeploy(usuario.clinicaId);
+    const atualizado = await buscarPorId(usuario.id);
+    if (!atualizado) {
+      throw new AppError(401, 'Sessão expirada. Entre novamente.');
+    }
 
-    res.json(montarSessao({ token, usuario, unidadeAtualId, uso }));
+    const uso = await usoDaClinica(atualizado.clinicaId);
+
+    res.json(montarSessao({ token, usuario: atualizado, unidadeAtualId, uso }));
   } catch (err) {
     next(err);
   }
@@ -129,10 +135,16 @@ export async function me(
       throw new AppError(401, 'Sessão expirada. Entre novamente.');
     }
 
-    const uso = await usoDaClinica(usuario.clinicaId);
+    await sincronizarPlanoDoDeploy(usuario.clinicaId);
+    const atualizado = await buscarPorId(auth.sub);
+    if (!atualizado) {
+      throw new AppError(401, 'Sessão expirada. Entre novamente.');
+    }
+
+    const uso = await usoDaClinica(atualizado.clinicaId);
 
     res.json(
-      montarMe({ usuario, unidadeAtualId: auth.unidadeAtualId, uso }),
+      montarMe({ usuario: atualizado, unidadeAtualId: auth.unidadeAtualId, uso }),
     );
   } catch (err) {
     next(err);

@@ -8,7 +8,7 @@ export async function obterDashboard(req: Request, res: Response, next: NextFunc
   try {
     const { usuario, somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
     const incluirFinanceiro = temAcessoAoModulo(usuario, 'financeiro', 'visualizar');
-    const permissoes = permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo);
+    const permissoes = permissoesEfetivas(usuario.perfil);
 
     if (somenteProprios && !profissionalIdEscopo) {
       res.json(montarDashboard(painelVazio(), incluirFinanceiro));

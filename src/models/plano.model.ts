@@ -1,5 +1,6 @@
 import { Plano, Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../config/database';
+import { env } from '../config/env';
 import { AppError } from '../lib/erros';
 import { limiteUnidadesDoPlano, mensagemLimiteUnidades } from '../lib/modulos-plano';
 
@@ -26,24 +27,59 @@ export async function buscarPorId(id: string): Promise<Plano | null> {
   return prisma.plano.findUnique({ where: { id } });
 }
 
-export async function usoDaClinica(
-  clinicaId: string,
-  tx: ClientePrisma = prisma,
-): Promise<UsoUsuarios> {
-  const clinica = await tx.clinica.findUnique({
+/** Plano vigente neste deploy (`PLANO` no ambiente). */
+export async function planoDoDeploy(): Promise<Plano> {
+  const plano = await buscarPorCodigo(env.PLANO);
+  if (!plano || !plano.ativo) {
+    throw new AppError(500, 'Plano configurado no servidor é inválido.');
+  }
+  return plano;
+}
+
+/**
+ * Alinha a clínica ao `PLANO` da API. O setup grava o plano uma vez; mudar a env
+ * no deploy precisa refletir no banco para login, limites e módulos.
+ */
+export async function sincronizarPlanoDoDeploy(clinicaId: string): Promise<Plano> {
+  const alvo = await planoDoDeploy();
+  const clinica = await prisma.clinica.findUnique({
     where: { id: clinicaId },
-    include: { plano: true },
+    select: { planoId: true },
   });
 
   if (!clinica) {
     throw new AppError(404, 'Clínica não encontrada.');
   }
 
+  if (clinica.planoId !== alvo.id) {
+    await prisma.clinica.update({
+      where: { id: clinicaId },
+      data: { planoId: alvo.id },
+    });
+  }
+
+  return alvo;
+}
+
+export async function usoDaClinica(
+  clinicaId: string,
+  tx: ClientePrisma = prisma,
+): Promise<UsoUsuarios> {
+  const clinica = await tx.clinica.findUnique({
+    where: { id: clinicaId },
+    select: { id: true },
+  });
+
+  if (!clinica) {
+    throw new AppError(404, 'Clínica não encontrada.');
+  }
+
+  const plano = await planoDoDeploy();
   const usados = await tx.usuario.count({
     where: { clinicaId, status: 'ativo' },
   });
 
-  const limite = clinica.plano.limiteUsuarios;
+  const limite = plano.limiteUsuarios;
   const podeAdicionar = limite === null || usados < limite;
 
   return { usados, limite, podeAdicionar };
@@ -68,14 +104,14 @@ export async function assertPodeAdicionarUnidade(
 ): Promise<void> {
   const clinica = await tx.clinica.findUnique({
     where: { id: clinicaId },
-    include: { plano: true },
+    select: { id: true },
   });
 
   if (!clinica) {
     throw new AppError(404, 'Clínica não encontrada.');
   }
 
-  const limite = limiteUnidadesDoPlano(clinica.plano.codigo);
+  const limite = limiteUnidadesDoPlano(env.PLANO);
   if (limite === null) return;
 
   const ativas = await tx.unidade.count({
@@ -83,6 +119,6 @@ export async function assertPodeAdicionarUnidade(
   });
 
   if (ativas >= limite) {
-    throw new AppError(403, mensagemLimiteUnidades(clinica.plano.codigo));
+    throw new AppError(403, mensagemLimiteUnidades(env.PLANO));
   }
 }
