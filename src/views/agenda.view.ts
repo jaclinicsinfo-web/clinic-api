@@ -59,6 +59,28 @@ export const SALAS_PADRAO = [
   'Sala Cirúrgica',
 ];
 
+export function pacienteAgendaResumo(item: {
+  id: string;
+  nome: string;
+  telefone: string;
+  cpf: string;
+  dataNascimento: Date;
+  convenioId: string | null;
+  alergias: string[];
+  status: string;
+}) {
+  return {
+    id: item.id,
+    nome: item.nome,
+    telefone: item.telefone,
+    cpf: item.cpf,
+    dataNascimento: dataCivil(item.dataNascimento),
+    convenioId: item.convenioId,
+    alergias: item.alergias,
+    status: item.status,
+  };
+}
+
 export function montarAgenda(params: {
   agendamentos: AgendamentoCompleto[];
   bloqueios: BloqueioAgenda[];
@@ -67,6 +89,8 @@ export function montarAgenda(params: {
   procedimentos: unknown[];
   convenios: { id: string; nome: string }[];
   pacientes: unknown[];
+  ultimosPacientes: unknown[];
+  ultimosPacientesPorProfissional: Record<string, unknown[]>;
   somenteProprios: boolean;
   meuProfissionalId: string | null;
 }) {
@@ -78,6 +102,8 @@ export function montarAgenda(params: {
     procedimentos: params.procedimentos,
     convenios: params.convenios,
     pacientes: params.pacientes,
+    ultimosPacientes: params.ultimosPacientes,
+    ultimosPacientesPorProfissional: params.ultimosPacientesPorProfissional,
     salas: SALAS_PADRAO,
     somenteProprios: params.somenteProprios,
     meuProfissionalId: params.meuProfissionalId,

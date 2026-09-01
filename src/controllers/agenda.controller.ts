@@ -23,6 +23,7 @@ import {
   listar,
   listarBloqueios,
   listarEspera,
+  listarUltimosPacientesAgrupados,
   marcarEsperaEncaixada,
   marcarLembrete,
   reagendar,
@@ -40,7 +41,7 @@ import { buscarPorIdEClinica as buscarConvenio, listarAtivosPorClinica as listar
 import { possuiAcessoUnidade } from '../models/usuario.model';
 import { carregarContextoClinico, exigirProfissionalVinculado, exigirUnidade } from '../lib/escopo';
 import { AppError } from '../lib/erros';
-import { dataCivil, dataDeIso, dinheiro, hojeCivil } from '../lib/datas';
+import { dataDeIso, dinheiro, hojeCivil } from '../lib/datas';
 import { profissionalCompleto } from '../views/profissionais.view';
 import { procedimentoResumo } from '../views/procedimentos.view';
 import { garantirDoAgendamento } from '../models/cobranca.model';
@@ -49,6 +50,7 @@ import {
   montarAgendamento,
   montarBloqueio,
   montarEspera,
+  pacienteAgendaResumo,
 } from '../views/agenda.view';
 
 function periodoPadrao(de?: string, ate?: string) {
@@ -171,6 +173,8 @@ export async function obterAgenda(req: Request, res: Response, next: NextFunctio
           procedimentos: [],
           convenios: [],
           pacientes: [],
+          ultimosPacientes: [],
+          ultimosPacientesPorProfissional: {},
           somenteProprios: true,
           meuProfissionalId: null,
         }),
@@ -185,7 +189,7 @@ export async function obterAgenda(req: Request, res: Response, next: NextFunctio
       profissionalId: profissionalIdEscopo ?? undefined,
     };
 
-    const [agendamentos, bloqueios, listaEspera, profissionais, procedimentos, convenios, pacientes] =
+    const [agendamentos, bloqueios, listaEspera, profissionais, procedimentos, convenios, pacientes, ultimos] =
       await Promise.all([
         listar(filtro),
         listarBloqueios(filtro),
@@ -194,7 +198,12 @@ export async function obterAgenda(req: Request, res: Response, next: NextFunctio
         listarProcedimentosAtivos(clinicaId),
         listarConveniosAtivos(clinicaId),
         listarResumoAgenda(clinicaId, profissionalIdEscopo ?? undefined),
+        listarUltimosPacientesAgrupados(clinicaId, profissionalIdEscopo ?? undefined),
       ]);
+
+    const ultimosPacientesPorProfissional = Object.fromEntries(
+      Object.entries(ultimos.porProfissional).map(([id, lista]) => [id, lista.map(pacienteAgendaResumo)]),
+    );
 
     res.json(
       montarAgenda({
@@ -204,10 +213,9 @@ export async function obterAgenda(req: Request, res: Response, next: NextFunctio
         profissionais: (Array.isArray(profissionais) ? profissionais : [profissionais]).map(profissionalCompleto),
         procedimentos: procedimentos.map(procedimentoResumo),
         convenios,
-        pacientes: pacientes.map((item) => ({
-          ...item,
-          dataNascimento: dataCivil(item.dataNascimento),
-        })),
+        pacientes: pacientes.map(pacienteAgendaResumo),
+        ultimosPacientes: ultimos.clinica.map(pacienteAgendaResumo),
+        ultimosPacientesPorProfissional,
         somenteProprios,
         meuProfissionalId: profissionalIdEscopo,
       }),

@@ -65,6 +65,59 @@ export async function listarDoProfissional(profissionalId: string, clinicaId: st
   });
 }
 
+const selectPacienteAgenda = {
+  id: true,
+  nome: true,
+  telefone: true,
+  cpf: true,
+  dataNascimento: true,
+  convenioId: true,
+  alergias: true,
+  status: true,
+} as const;
+
+export type PacienteResumoAgenda = Prisma.PacienteGetPayload<{ select: typeof selectPacienteAgenda }>;
+
+export async function listarUltimosPacientesAgrupados(
+  clinicaId: string,
+  profissionalId?: string,
+  limite = 3,
+): Promise<{ clinica: PacienteResumoAgenda[]; porProfissional: Record<string, PacienteResumoAgenda[]> }> {
+  const agendamentos = await prisma.agendamento.findMany({
+    where: {
+      clinicaId,
+      ...(profissionalId ? { profissionalId } : {}),
+      status: { notIn: ['cancelado'] },
+      paciente: { status: { not: 'arquivado' } },
+    },
+    orderBy: [{ data: 'desc' }, { horaInicio: 'desc' }],
+    take: profissionalId ? limite * 20 : 400,
+    select: {
+      profissionalId: true,
+      paciente: { select: selectPacienteAgenda },
+    },
+  });
+
+  const clinica: PacienteResumoAgenda[] = [];
+  const vistoClinica = new Set<string>();
+  const porProfissional: Record<string, PacienteResumoAgenda[]> = {};
+
+  for (const item of agendamentos) {
+    if (!vistoClinica.has(item.paciente.id) && clinica.length < limite) {
+      vistoClinica.add(item.paciente.id);
+      clinica.push(item.paciente);
+    }
+
+    const lista = porProfissional[item.profissionalId] ?? [];
+    if (lista.length < limite && !lista.some((paciente) => paciente.id === item.paciente.id)) {
+      lista.push(item.paciente);
+      porProfissional[item.profissionalId] = lista;
+    }
+  }
+
+  return { clinica, porProfissional };
+}
+
 export async function buscarPorIdEClinica(
   id: string,
   clinicaId: string,
