@@ -7,6 +7,7 @@ import {
   sincronizarOperacionais,
 } from '../models/notificacao.model';
 import { buscarPorId } from '../models/usuario.model';
+import { permissoesEfetivas } from '../lib/permissoes';
 import { AppError } from '../lib/erros';
 import { montarListaNotificacoes, notificacaoResumo } from '../views/notificacoes.view';
 
@@ -24,7 +25,7 @@ export async function listarNotificacoes(req: Request, res: Response, next: Next
     await sincronizarOperacionais({
       clinicaId: usuario.clinicaId,
       usuarioId: usuario.id,
-      permissoes: usuario.perfil.permissoes,
+      permissoes: permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo),
     });
 
     const notificacoes = await listarDoUsuario(usuario.id);

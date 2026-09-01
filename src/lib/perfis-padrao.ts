@@ -17,6 +17,9 @@ export const MODULOS = [
   'estoque',
   'relatorios',
   'configuracoes',
+  'integracoes',
+  'powerbi',
+  'agenteia',
 ] as const;
 
 type Modulo = (typeof MODULOS)[number];
@@ -38,7 +41,7 @@ function base(): Permissoes {
   return p;
 }
 
-function todasTrue(): Permissoes {
+export function todasTrue(): Permissoes {
   const p = {} as Permissoes;
   for (const modulo of MODULOS) {
     p[modulo] = acoes(true, true, true, true);
@@ -83,6 +86,9 @@ const gestor: PerfilPadrao = {
     estoque: acoes(true, true, true, false),
     relatorios: acoes(true, false, false, false),
     configuracoes: acoes(false, false, false, false),
+    integracoes: acoes(true),
+    powerbi: acoes(true),
+    agenteia: acoes(true),
   }),
 };
 

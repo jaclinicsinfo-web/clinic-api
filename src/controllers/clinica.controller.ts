@@ -19,6 +19,7 @@ import {
   nomeJaExiste,
 } from '../models/unidade.model';
 import { listarIdsAdministradoresAtivos } from '../models/usuario.model';
+import { assertPodeAdicionarUnidade } from '../models/plano.model';
 import { AppError } from '../lib/erros';
 import { montarClinica, montarUnidadeMutacao } from '../views/clinica.view';
 
@@ -133,6 +134,8 @@ export async function criarUnidadeClinica(req: Request, res: Response, next: Nex
       throw new AppError(409, 'Já existe uma unidade com este nome.');
     }
 
+    await assertPodeAdicionarUnidade(clinicaId);
+
     const unidade = await criarUnidade({
       clinicaId,
       nome: dados.nome,
@@ -191,7 +194,13 @@ export async function inativarUnidadeClinica(req: Request, res: Response, next: 
 export async function ativarUnidadeClinica(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const unidade = await carregarUnidade(req);
-    const atualizada = unidade.ativo ? unidade : await alterarAtivo(unidade.id, true);
+    if (unidade.ativo) {
+      await responderUnidade(req, res, unidade);
+      return;
+    }
+
+    await assertPodeAdicionarUnidade(unidade.clinicaId);
+    const atualizada = await alterarAtivo(unidade.id, true);
     await responderUnidade(req, res, atualizada);
   } catch (err) {
     next(err);

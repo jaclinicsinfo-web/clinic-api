@@ -10,13 +10,14 @@ Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, *
 
 ## Conceitos importantes
 
-- **3 planos = limite de CONTAS (pessoas que fazem login).**
-  - `essencial` → até 5 usuários
-  - `profissional` → até 20 usuários
-  - `ilimitado` → sem limite (`limiteUsuarios = null`)
+- **3 planos = limite de contas, unidades e módulos.**
+  - `essencial` → até 5 usuários, 1 unidade, núcleo operacional (agenda, pacientes, prontuário, profissionais, convênios, LGPD)
+  - `profissional` → até 20 usuários, várias unidades, + financeiro, relatórios e estoque
+  - `ilimitado` → sem limite de contas ou unidades, + integrações, Power BI e agente de IA
   - Apenas usuários com `status = "ativo"` ocupam vaga. Ao inativar, a vaga é liberada.
 - **5 perfis = papéis RBAC**, criados por clínica no cadastro: `Administrador`, `Gestor`, `Recepção`,
   `Profissional de saúde`, `Financeiro`. Existem nos 3 planos. Perfil é papel de permissão, **não** conta.
+  O plano corta o módulo mesmo que o perfil tenha a permissão marcada.
 - **Plano = variável de ambiente.** `PLANO=essencial|profissional|ilimitado` no deploy da API. O
   primeiro acesso **não** pergunta o plano. Quem define é quem configura o servidor.
 - **Setup no painel = banco vazio.** `GET /setup/status` diz se ainda não existe clínica. `POST /setup`

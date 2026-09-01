@@ -1,7 +1,7 @@
 import { PerfilAcesso, Plano, Unidade } from '@prisma/client';
 import { UsuarioCompleto } from '../models/usuario.model';
 import { UsoUsuarios } from '../models/plano.model';
-import { montarPermissoes } from '../lib/permissoes';
+import { montarPermissoesDoPerfil } from '../lib/permissoes';
 import { planoResumo, unidadeResumo, usuarioResumo } from './auth.view';
 
 export function perfilCompleto(perfil: PerfilAcesso) {
@@ -10,7 +10,7 @@ export function perfilCompleto(perfil: PerfilAcesso) {
     nome: perfil.nome,
     descricao: perfil.descricao,
     sistema: perfil.sistema,
-    permissoes: montarPermissoes(perfil.permissoes),
+    permissoes: montarPermissoesDoPerfil(perfil),
   };
 }
 

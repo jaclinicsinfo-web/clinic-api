@@ -1,4 +1,5 @@
-import { AcoesModulo, MODULOS, Permissoes } from './perfis-padrao';
+import { AcoesModulo, MODULOS, NOME_PERFIL_ADMINISTRADOR, Permissoes, todasTrue } from './perfis-padrao';
+import { mensagemModuloForaDoPlano, planoIncluiModulo } from './modulos-plano';
 
 export type AcaoPermissao = keyof AcoesModulo;
 
@@ -56,3 +57,38 @@ export function montarPermissoes(raw: unknown): PermissaoItem[] {
 export function temPermissao(raw: unknown, modulo: string, acao: AcaoPermissao): boolean {
   return Boolean(permissoesComoMapa(raw)[modulo]?.[acao]);
 }
+
+export function restringirPermissoesAoPlano(itens: PermissaoItem[], codigoPlano: string): PermissaoItem[] {
+  return itens.map((item) =>
+    planoIncluiModulo(codigoPlano, item.modulo) ? item : { modulo: item.modulo, ...acoesVazias() },
+  );
+}
+
+export function montarPermissoesDoPerfil(perfil: { nome: string; permissoes: unknown }): PermissaoItem[] {
+  if (perfil.nome === NOME_PERFIL_ADMINISTRADOR) {
+    return montarPermissoes(todasTrue());
+  }
+  return montarPermissoes(perfil.permissoes);
+}
+
+export function permissoesEfetivas(
+  perfil: { nome: string; permissoes: unknown },
+  codigoPlano: string,
+): PermissaoItem[] {
+  return restringirPermissoesAoPlano(montarPermissoesDoPerfil(perfil), codigoPlano);
+}
+
+export function temAcessoAoModulo(
+  usuario: {
+    perfil: { nome: string; permissoes: unknown };
+    clinica: { plano: { codigo: string } };
+  },
+  modulo: string,
+  acao: AcaoPermissao = 'visualizar',
+): boolean {
+  return Boolean(
+    permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo).find((item) => item.modulo === modulo)?.[acao],
+  );
+}
+
+export { mensagemModuloForaDoPlano, planoIncluiModulo };

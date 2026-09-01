@@ -1,7 +1,8 @@
 import { Plano } from '@prisma/client';
 import { UsuarioCompleto } from '../models/usuario.model';
 import { UsoUsuarios } from '../models/plano.model';
-import { montarPermissoes } from '../lib/permissoes';
+import { montarPermissoesDoPerfil, permissoesEfetivas } from '../lib/permissoes';
+import { limiteUnidadesDoPlano, modulosDoPlano } from '../lib/modulos-plano';
 
 export function unidadeResumo(unidade: { id: string; nome: string; cidade: string; ativo?: boolean }) {
   return {
@@ -23,14 +24,21 @@ export function planoResumo(plano: Plano) {
     codigo: plano.codigo,
     nome: plano.nome,
     limiteUsuarios: plano.limiteUsuarios,
+    limiteUnidades: limiteUnidadesDoPlano(plano.codigo),
+    modulos: [...modulosDoPlano(plano.codigo)],
   };
 }
 
-export function perfilResumo(perfil: { id: string; nome: string; permissoes: unknown }) {
+export function perfilResumo(
+  perfil: { id: string; nome: string; permissoes: unknown },
+  codigoPlano?: string,
+) {
   return {
     id: perfil.id,
     nome: perfil.nome,
-    permissoes: montarPermissoes(perfil.permissoes),
+    permissoes: codigoPlano
+      ? permissoesEfetivas(perfil, codigoPlano)
+      : montarPermissoesDoPerfil(perfil),
   };
 }
 
@@ -65,7 +73,7 @@ export function montarSessao(params: {
     unidades,
     unidadeAtualId,
     clinicaNome: usuario.clinica.nomeFantasia,
-    perfil: perfilResumo(usuario.perfil),
+    perfil: perfilResumo(usuario.perfil, usuario.clinica.plano.codigo),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
   };
@@ -84,7 +92,7 @@ export function montarMe(params: {
     unidades,
     unidadeAtualId,
     clinicaNome: usuario.clinica.nomeFantasia,
-    perfil: perfilResumo(usuario.perfil),
+    perfil: perfilResumo(usuario.perfil, usuario.clinica.plano.codigo),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
   };
