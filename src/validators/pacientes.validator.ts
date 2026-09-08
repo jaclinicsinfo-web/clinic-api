@@ -160,14 +160,6 @@ export const pacienteBodySchema = z
       });
     }
 
-    if (dados.convenioId && !dados.numeroCarteirinha) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Informe o número da carteirinha.',
-        path: ['numeroCarteirinha'],
-      });
-    }
-
     if (idadeEmAnos(dados.dataNascimento) < 18 && !dados.responsavel?.nome) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

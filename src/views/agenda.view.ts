@@ -18,6 +18,7 @@ export function agendamentoResumo(agendamento: AgendamentoCompleto) {
     convenioId: agendamento.convenioId,
     convenioNome: agendamento.convenio?.nome ?? null,
     particular: agendamento.particular,
+    tipo: agendamento.tipo === 'avaliacao' ? 'avaliacao' : 'atendimento',
     valor: dinheiro(agendamento.valor),
     status: agendamento.status,
     observacoes: agendamento.observacoes,

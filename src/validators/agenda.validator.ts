@@ -11,6 +11,8 @@ export const STATUS_AGENDAMENTO = [
   'faltou',
 ] as const;
 
+export const TIPO_AGENDAMENTO = ['avaliacao', 'atendimento'] as const;
+
 export const FLUXO_STATUS: Record<(typeof STATUS_AGENDAMENTO)[number], (typeof STATUS_AGENDAMENTO)[number][]> = {
   agendado: ['confirmado', 'cancelado'],
   confirmado: ['check_in', 'cancelado', 'faltou'],
@@ -37,6 +39,7 @@ export const agendamentoBodySchema = z
     sala: textoOpcional,
     particular: z.boolean(),
     convenioId: uuidOpcional,
+    tipo: z.enum(TIPO_AGENDAMENTO).optional().default('atendimento'),
     observacoes: textoOpcional,
     status: z.enum(STATUS_AGENDAMENTO).optional().default('agendado'),
   })
@@ -46,13 +49,6 @@ export const agendamentoBodySchema = z
         code: z.ZodIssueCode.custom,
         message: 'O horário final deve ser posterior ao inicial.',
         path: ['horaFim'],
-      });
-    }
-    if (!dados.particular && !dados.convenioId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Informe o convênio ou marque como particular.',
-        path: ['convenioId'],
       });
     }
   });

@@ -336,6 +336,7 @@ model Agendamento {
   sala            String?
   convenioId      String?  @db.Uuid
   particular      Boolean
+  tipo            String   @default("atendimento")
   valor           Decimal  @db.Decimal(12, 2)
   status          String
   observacoes     String?

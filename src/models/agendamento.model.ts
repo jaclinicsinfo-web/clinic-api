@@ -31,6 +31,7 @@ export interface DadosAgendamento {
   sala: string | null;
   convenioId: string | null;
   particular: boolean;
+  tipo: string;
   valor: number;
   status: string;
   observacoes: string | null;
@@ -151,6 +152,7 @@ export async function atualizar(
       sala: dados.sala,
       convenioId: dados.convenioId,
       particular: dados.particular,
+      tipo: dados.tipo,
       valor: dados.valor,
       status: dados.status,
       observacoes: dados.observacoes,
