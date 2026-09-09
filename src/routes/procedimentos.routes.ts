@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  ativarProcedimento,
   atualizarProcedimento,
   criarProcedimento,
   inativarProcedimento,
@@ -17,5 +18,6 @@ router.get('/', listarProcedimentos);
 router.post('/', exigirPermissao('configuracoes', 'criar'), criarProcedimento);
 router.patch('/:id', exigirPermissao('configuracoes', 'editar'), atualizarProcedimento);
 router.patch('/:id/inativar', exigirPermissao('configuracoes', 'editar'), inativarProcedimento);
+router.patch('/:id/ativar', exigirPermissao('configuracoes', 'editar'), ativarProcedimento);
 
 export default router;

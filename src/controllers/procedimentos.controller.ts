@@ -87,3 +87,17 @@ export async function inativarProcedimento(req: Request, res: Response, next: Ne
     next(err);
   }
 }
+
+export async function ativarProcedimento(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const procedimento = await carregar(req);
+    if (procedimento.status === 'ativo') {
+      res.json(montarProcedimento(procedimento));
+      return;
+    }
+    const atualizado = await alterarStatus(procedimento.id, 'ativo');
+    res.json(montarProcedimento(atualizado));
+  } catch (err) {
+    next(err);
+  }
+}

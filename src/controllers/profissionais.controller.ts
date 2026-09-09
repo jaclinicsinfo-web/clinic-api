@@ -226,3 +226,17 @@ export async function inativarProfissional(req: Request, res: Response, next: Ne
     next(err);
   }
 }
+
+export async function ativarProfissional(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const profissional = await carregar(req);
+    if (profissional.status === 'ativo') {
+      res.json(montarProfissional(profissional));
+      return;
+    }
+    const atualizado = await alterarStatus(profissional.id, 'ativo');
+    res.json(montarProfissional(atualizado));
+  } catch (err) {
+    next(err);
+  }
+}

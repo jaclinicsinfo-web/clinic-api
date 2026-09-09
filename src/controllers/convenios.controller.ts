@@ -141,6 +141,20 @@ export async function inativarConvenio(req: Request, res: Response, next: NextFu
   }
 }
 
+export async function ativarConvenio(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const convenio = await carregarConvenio(req);
+    if (convenio.status === 'ativo') {
+      res.json(montarConvenio(convenio));
+      return;
+    }
+    const atualizado = await alterarStatus(convenio.id, 'ativo');
+    res.json(montarConvenio(atualizado));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function salvarTabelaConvenio(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const convenio = await carregarConvenio(req);

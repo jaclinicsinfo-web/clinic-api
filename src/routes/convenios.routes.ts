@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  ativarConvenio,
   atualizarConvenio,
   criarConvenio,
   inativarConvenio,
@@ -20,6 +21,7 @@ router.post('/', exigirPermissao('convenios', 'criar'), criarConvenio);
 router.get('/:id', obterConvenio);
 router.patch('/:id', exigirPermissao('convenios', 'editar'), atualizarConvenio);
 router.patch('/:id/inativar', exigirPermissao('convenios', 'editar'), inativarConvenio);
+router.patch('/:id/ativar', exigirPermissao('convenios', 'editar'), ativarConvenio);
 router.put('/:id/tabela', exigirPermissao('convenios', 'editar'), salvarTabelaConvenio);
 
 export default router;
