@@ -28,10 +28,10 @@ router.patch('/:id/reagendar', exigirPermissao('agenda', 'editar'), reagendarAge
 router.patch('/:id/lembrete', exigirPermissao('agenda', 'editar'), marcarLembreteAgendamento);
 
 router.post('/bloqueios', exigirPermissao('agenda', 'criar'), criarBloqueioAgenda);
-router.delete('/bloqueios/:id', exigirPermissao('agenda', 'editar'), removerBloqueioAgenda);
+router.delete('/bloqueios/:id', exigirPermissao('agenda', 'excluir'), removerBloqueioAgenda);
 
 router.post('/espera', exigirPermissao('agenda', 'criar'), criarItemEspera);
 router.patch('/espera/:id/encaixar', exigirPermissao('agenda', 'editar'), encaixarEspera);
-router.delete('/espera/:id', exigirPermissao('agenda', 'editar'), removerItemEspera);
+router.delete('/espera/:id', exigirPermissao('agenda', 'excluir'), removerItemEspera);
 
 export default router;

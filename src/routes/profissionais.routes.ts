@@ -21,7 +21,7 @@ router.get('/opcoes', opcoesProfissionais);
 router.post('/', exigirPermissao('profissionais', 'criar'), criarProfissional);
 router.get('/:id', obterProfissional);
 router.patch('/:id', exigirPermissao('profissionais', 'editar'), atualizarProfissional);
-router.patch('/:id/inativar', exigirPermissao('profissionais', 'editar'), inativarProfissional);
-router.patch('/:id/ativar', exigirPermissao('profissionais', 'editar'), ativarProfissional);
+router.patch('/:id/inativar', exigirPermissao('profissionais', 'excluir'), inativarProfissional);
+router.patch('/:id/ativar', exigirPermissao('profissionais', 'excluir'), ativarProfissional);
 
 export default router;

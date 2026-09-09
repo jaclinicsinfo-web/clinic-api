@@ -18,6 +18,8 @@ import { listarPorProfissional as listarComissoes } from '../models/comissao.mod
 import { comissaoResumo } from '../views/financeiro.view';
 import { NOME_PERFIL_PROFISSIONAL_SAUDE } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
+import { temAcessoAoModulo } from '../lib/permissoes';
+import { carregarUsuario } from '../lib/escopo';
 import { dataDeIso, dinheiro } from '../lib/datas';
 import { agendamentoResumo } from '../views/agenda.view';
 import {
@@ -133,14 +135,16 @@ export async function opcoesProfissionais(req: Request, res: Response, next: Nex
 export async function obterProfissional(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const profissional = await carregar(req);
+    const usuario = await carregarUsuario(req);
     const clinicaId = req.auth!.clinicaId;
+    const verFinanceiro = temAcessoAoModulo(usuario, 'financeiro', 'visualizar');
     const { inicio, fim } = inicioFimMesAtual();
     const [indicadoresMes, pacientes, agenda, procedimentos, comissoes] = await Promise.all([
       indicadores(profissional.id, clinicaId, inicio, fim),
       pacientesAtendidos(profissional.id, clinicaId),
       listarDoProfissional(profissional.id, clinicaId),
       listarAtivosPorClinica(clinicaId),
-      listarComissoes(profissional.id, clinicaId),
+      verFinanceiro ? listarComissoes(profissional.id, clinicaId) : Promise.resolve([]),
     ]);
 
     const horas = horasSemanais(profissional.gradeHorarios);
@@ -156,7 +160,7 @@ export async function obterProfissional(req: Request, res: Response, next: NextF
         indicadores: {
           atendimentosMes: indicadoresMes.atendimentosMes,
           agendamentosMes: indicadoresMes.agendamentosMes,
-          faturamentoGerado: indicadoresMes.faturamentoGerado,
+          faturamentoGerado: verFinanceiro ? indicadoresMes.faturamentoGerado : 0,
           taxaOcupacao,
           taxaFaltas: indicadoresMes.taxaFaltas,
           pacientesAtendidos: indicadoresMes.pacientesAtendidos,

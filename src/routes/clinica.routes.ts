@@ -28,7 +28,7 @@ router.delete('/logo', exigirPermissao('configuracoes', 'editar'), excluirLogo);
 
 router.post('/unidades', exigirPermissao('configuracoes', 'criar'), criarUnidadeClinica);
 router.patch('/unidades/:id', exigirPermissao('configuracoes', 'editar'), atualizarUnidadeClinica);
-router.patch('/unidades/:id/inativar', exigirPermissao('configuracoes', 'editar'), inativarUnidadeClinica);
-router.patch('/unidades/:id/ativar', exigirPermissao('configuracoes', 'editar'), ativarUnidadeClinica);
+router.patch('/unidades/:id/inativar', exigirPermissao('configuracoes', 'excluir'), inativarUnidadeClinica);
+router.patch('/unidades/:id/ativar', exigirPermissao('configuracoes', 'excluir'), ativarUnidadeClinica);
 
 export default router;

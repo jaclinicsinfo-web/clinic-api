@@ -27,10 +27,10 @@ router.post('/', exigirPermissao('pacientes', 'criar'), criarPaciente);
 router.get('/:id', obterPaciente);
 router.get('/:id/opcoes-clinicas', opcoesClinicasPaciente);
 router.patch('/:id', exigirPermissao('pacientes', 'editar'), atualizarPaciente);
-router.patch('/:id/arquivar', exigirPermissao('pacientes', 'editar'), arquivarPaciente);
+router.patch('/:id/arquivar', exigirPermissao('pacientes', 'excluir'), arquivarPaciente);
 router.post('/:id/atendimentos', exigirPermissao('pacientes', 'editar'), registrarEvolucao);
 router.post('/:id/documentos', exigirPermissao('pacientes', 'editar'), tratarUpload, enviarDocumento);
 router.get('/:id/documentos/:docId/arquivo', baixarDocumento);
-router.delete('/:id/documentos/:docId', exigirPermissao('pacientes', 'editar'), excluirDocumento);
+router.delete('/:id/documentos/:docId', exigirPermissao('pacientes', 'excluir'), excluirDocumento);
 
 export default router;

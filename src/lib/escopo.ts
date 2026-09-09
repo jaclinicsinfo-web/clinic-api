@@ -2,20 +2,21 @@ import { Request } from 'express';
 import { buscarPorId, UsuarioCompleto } from '../models/usuario.model';
 import { buscarPorUsuarioId } from '../models/profissional.model';
 import { NOME_PERFIL_PROFISSIONAL_SAUDE } from './perfis-padrao';
+import { temAcessoAoModulo } from './permissoes';
 import { AppError } from './erros';
 
-const PERFIS_PRONTUARIO = new Set(['Administrador', 'Gestor', NOME_PERFIL_PROFISSIONAL_SAUDE]);
+type UsuarioComPerfil = { perfil: { nome: string; permissoes: unknown } };
 
 export function ehProfissionalSaude(perfilNome: string) {
   return perfilNome === NOME_PERFIL_PROFISSIONAL_SAUDE;
 }
 
-export function podeVerProntuario(perfilNome: string) {
-  return PERFIS_PRONTUARIO.has(perfilNome);
+export function podeVerProntuario(usuario: UsuarioComPerfil) {
+  return temAcessoAoModulo(usuario, 'pacientes', 'visualizar');
 }
 
-export function podeRegistrarProntuario(perfilNome: string) {
-  return PERFIS_PRONTUARIO.has(perfilNome);
+export function podeRegistrarProntuario(usuario: UsuarioComPerfil) {
+  return temAcessoAoModulo(usuario, 'pacientes', 'editar');
 }
 
 export async function carregarUsuario(req: Request): Promise<UsuarioCompleto> {

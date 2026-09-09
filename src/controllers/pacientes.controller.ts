@@ -41,6 +41,7 @@ import {
   podeRegistrarProntuario,
   podeVerProntuario,
 } from '../lib/escopo';
+import { temAcessoAoModulo } from '../lib/permissoes';
 import { AppError } from '../lib/erros';
 import { dataCivil, dataDeIso, hojeCivil } from '../lib/datas';
 import { agendamentoResumo } from '../views/agenda.view';
@@ -221,8 +222,9 @@ export async function obterPaciente(
   try {
     const { usuario, paciente } = await carregarNoEscopo(req);
     const clinicaId = paciente.clinicaId;
-    const verProntuario = podeVerProntuario(usuario.perfil.nome);
-    const registrar = podeRegistrarProntuario(usuario.perfil.nome);
+    const verProntuario = podeVerProntuario(usuario);
+    const registrar = podeRegistrarProntuario(usuario);
+    const verFinanceiro = temAcessoAoModulo(usuario, 'financeiro', 'visualizar');
 
     const [agendamentos, acompanhamentos, atendimentos, documentos, agendaMap, cobrancas] = await Promise.all([
       listarDoPaciente(paciente.id, clinicaId),
@@ -230,7 +232,7 @@ export async function obterPaciente(
       verProntuario ? listarAtendimentos(paciente.id, clinicaId) : Promise.resolve([]),
       verProntuario ? listarDocumentos(paciente.id, clinicaId) : Promise.resolve([]),
       datasPorPacientes(clinicaId, [paciente.id]),
-      listarCobrancas(clinicaId, paciente.id),
+      verFinanceiro ? listarCobrancas(clinicaId, paciente.id) : Promise.resolve([]),
     ]);
 
     if (verProntuario) {
@@ -247,7 +249,7 @@ export async function obterPaciente(
     const proximos = agendamentos
       .filter((item) => futuros.has(item.status) && (dataCivil(item.data) ?? '') >= hoje)
       .sort((a, b) => `${dataCivil(a.data)}${a.horaInicio}`.localeCompare(`${dataCivil(b.data)}${b.horaInicio}`));
-    const cobrancasResumo = cobrancas.map(cobrancaResumo);
+    const cobrancasResumo = verFinanceiro ? cobrancas.map(cobrancaResumo) : [];
     const saldoDevedor = cobrancasResumo.reduce((total, item) => total + (item.valorAberto ?? 0), 0);
 
     res.json(
@@ -359,7 +361,7 @@ export async function registrarEvolucao(
 ): Promise<void> {
   try {
     const { usuario, paciente, profissionalIdEscopo, somenteProprios } = await carregarNoEscopo(req);
-    if (!podeRegistrarProntuario(usuario.perfil.nome)) {
+    if (!podeRegistrarProntuario(usuario)) {
       throw new AppError(403, 'Você não tem permissão para registrar no prontuário.');
     }
 
@@ -450,7 +452,7 @@ export async function enviarDocumento(
 ): Promise<void> {
   try {
     const { usuario, paciente } = await carregarNoEscopo(req);
-    if (!podeRegistrarProntuario(usuario.perfil.nome)) {
+    if (!podeRegistrarProntuario(usuario)) {
       throw new AppError(403, 'Você não tem permissão para anexar documentos clínicos.');
     }
 
@@ -492,7 +494,7 @@ export async function baixarDocumento(
 ): Promise<void> {
   try {
     const { usuario, paciente } = await carregarNoEscopo(req);
-    if (!podeVerProntuario(usuario.perfil.nome)) {
+    if (!podeVerProntuario(usuario)) {
       throw new AppError(403, 'Você não tem permissão para acessar documentos clínicos.');
     }
 
@@ -520,7 +522,7 @@ export async function excluirDocumento(
 ): Promise<void> {
   try {
     const { usuario, paciente } = await carregarNoEscopo(req);
-    if (!podeRegistrarProntuario(usuario.perfil.nome)) {
+    if (!temAcessoAoModulo(usuario, 'pacientes', 'excluir')) {
       throw new AppError(403, 'Você não tem permissão para excluir documentos clínicos.');
     }
 

@@ -17,7 +17,7 @@ router.use(exigirPermissao('estoque', 'visualizar'));
 router.get('/', listarEstoque);
 router.post('/produtos', exigirPermissao('estoque', 'criar'), criarProdutoEstoque);
 router.patch('/produtos/:id', exigirPermissao('estoque', 'editar'), atualizarProdutoEstoque);
-router.patch('/produtos/:id/ativo', exigirPermissao('estoque', 'editar'), inativarProdutoEstoque);
+router.patch('/produtos/:id/ativo', exigirPermissao('estoque', 'excluir'), inativarProdutoEstoque);
 router.post('/movimentacoes', exigirPermissao('estoque', 'criar'), criarMovimentacaoEstoque);
 
 export default router;
