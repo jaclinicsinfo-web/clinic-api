@@ -33,8 +33,17 @@ export function horaCivil(agora = new Date()): string {
   return `${hora.padStart(2, '0')}:${minuto.padStart(2, '0')}`;
 }
 
-export function dinheiro(valor: { toString(): string } | number | string): number {
-  return Number(valor);
+export function dinheiro(
+  valor: { toString(): string; toNumber?: () => number } | number | string | null | undefined,
+): number {
+  if (valor == null) return 0;
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : 0;
+  if (typeof valor === "object" && typeof valor.toNumber === "function") {
+    const convertido = valor.toNumber();
+    return Number.isFinite(convertido) ? convertido : 0;
+  }
+  const convertido = Number(String(valor));
+  return Number.isFinite(convertido) ? convertido : 0;
 }
 
 export function horaParaMinutos(hora: string): number {
