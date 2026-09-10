@@ -47,6 +47,7 @@ export function usuarioResumo(usuario: UsuarioCompleto) {
     unidadesAcesso: usuario.usuarioUnidades.map((uu) => uu.unidadeId),
     status: usuario.status,
     ultimoAcesso: usuario.ultimoAcesso ? usuario.ultimoAcesso.toISOString() : null,
+    tema: usuario.tema === 'escuro' ? 'escuro' : 'claro',
   };
 }
 

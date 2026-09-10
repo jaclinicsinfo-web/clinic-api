@@ -6,6 +6,7 @@ import {
   logout,
   solicitarRecuperacao,
   redefinirSenha,
+  atualizarTemaPreferido,
 } from '../controllers/auth.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { limiteLogin, limiteRecuperacao } from '../middlewares/rate-limit.middleware';
@@ -17,6 +18,7 @@ router.post('/recuperar-senha', limiteRecuperacao, solicitarRecuperacao);
 router.post('/redefinir-senha', limiteRecuperacao, redefinirSenha);
 router.post('/selecionar-unidade', autenticar, selecionarUnidade);
 router.get('/me', autenticar, me);
+router.patch('/tema', autenticar, atualizarTemaPreferido);
 router.post('/logout', autenticar, logout);
 
 export default router;

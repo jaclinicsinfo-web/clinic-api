@@ -4,12 +4,14 @@ import {
   recuperarSenhaSchema,
   redefinirSenhaSchema,
   selecionarUnidadeSchema,
+  temaSchema,
 } from '../validators/auth.validator';
 import {
   buscarPorEmail,
   buscarPorId,
   registrarAcesso,
   possuiAcessoUnidade,
+  atualizarTema,
 } from '../models/usuario.model';
 import { criarRecuperacao, redefinirComToken } from '../models/recuperacao-senha.model';
 import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
@@ -153,6 +155,21 @@ export async function me(
 
 export function logout(_req: Request, res: Response): void {
   res.json(montarLogout());
+}
+
+export async function atualizarTemaPreferido(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const auth = req.auth!;
+    const { tema } = temaSchema.parse(req.body);
+    const usuario = await atualizarTema(auth.sub, tema);
+    res.json({ tema: usuario.tema === 'escuro' ? 'escuro' : 'claro' });
+  } catch (err) {
+    next(err);
+  }
 }
 
 const MENSAGEM_RECUPERACAO =

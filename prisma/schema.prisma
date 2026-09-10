@@ -109,6 +109,7 @@ model Usuario {
   senhaHash    String
   perfilId     String    @db.Uuid
   status       String    @default("ativo")
+  tema         String    @default("claro")
   ultimoAcesso DateTime?
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt

@@ -147,6 +147,22 @@ export async function registrarAcesso(id: string): Promise<void> {
   });
 }
 
+export async function atualizarTema(
+  id: string,
+  tema: 'claro' | 'escuro',
+): Promise<UsuarioCompleto> {
+  await prisma.usuario.update({
+    where: { id },
+    data: { tema },
+  });
+
+  const atualizado = await buscarPorId(id);
+  if (!atualizado) {
+    throw new AppError(404, 'Usuário não encontrado.');
+  }
+  return atualizado;
+}
+
 export async function possuiAcessoUnidade(
   usuarioId: string,
   unidadeId: string,

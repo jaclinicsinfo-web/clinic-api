@@ -21,3 +21,7 @@ export const redefinirSenhaSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SelecionarUnidadeInput = z.infer<typeof selecionarUnidadeSchema>;
+
+export const temaSchema = z.object({
+  tema: z.enum(['claro', 'escuro'], { errorMap: () => ({ message: 'Tema inválido.' }) }),
+});
