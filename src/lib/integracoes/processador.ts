@@ -129,6 +129,7 @@ async function processarUm(id: string): Promise<void> {
       erro: resultado.ok ? null : resultado.erro,
       destinatarioContato: para,
       custo,
+      custoEstimado: config.whatsappCobrancaModo !== 'repasse_plataforma',
       enviadoEm: resultado.ok ? new Date() : null,
       metadados: {
         preview: template ? interpolarTexto(template.corpo, contexto) : null,
@@ -169,6 +170,7 @@ async function processarUm(id: string): Promise<void> {
     erro: resultado.ok ? null : resultado.erro,
     destinatarioContato: para,
     custo,
+    custoEstimado: config.emailCobrancaModo !== 'repasse_plataforma',
     enviadoEm: resultado.ok ? new Date() : null,
     metadados: { preview: texto, assunto } as Prisma.InputJsonValue,
   });

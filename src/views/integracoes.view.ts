@@ -17,6 +17,7 @@ export function montarConfiguracao(
     whatsappAppSecretCifrado: string | null;
     whatsappVerifyTokenCifrado: string | null;
     whatsappAmbiente: string;
+    whatsappCobrancaModo?: string;
     emailAtivo: boolean;
     smtpHost: string | null;
     smtpPort: number | null;
@@ -25,6 +26,7 @@ export function montarConfiguracao(
     smtpRemetente: string | null;
     smtpRemetenteNome: string | null;
     smtpSeguro: string;
+    emailCobrancaModo?: string;
   },
   extras: { webhookUrl: string; clinicaId: string },
 ) {
@@ -42,6 +44,7 @@ export function montarConfiguracao(
       accessTokenMascarado: mascararPresente(config.whatsappAccessTokenCifrado),
       appSecretMascarado: mascararPresente(config.whatsappAppSecretCifrado),
       verifyTokenMascarado: mascararPresente(config.whatsappVerifyTokenCifrado),
+      cobrancaModo: config.whatsappCobrancaModo === 'repasse_plataforma' ? 'repasse_plataforma' : 'conta_clinica',
     },
     email: {
       ativo: config.emailAtivo,
@@ -53,6 +56,7 @@ export function montarConfiguracao(
       smtpRemetente: config.smtpRemetente,
       smtpRemetenteNome: config.smtpRemetenteNome,
       smtpSeguro: config.smtpSeguro,
+      cobrancaModo: config.emailCobrancaModo === 'repasse_plataforma' ? 'repasse_plataforma' : 'conta_clinica',
     },
   };
 }
@@ -170,9 +174,17 @@ export function montarEnvio(envio: EnvioCompleto) {
   };
 }
 
-export function montarDashboard(resumo: Record<string, number>, envios: EnvioCompleto[]) {
+export function montarDashboard(
+  resumo: Record<string, number>,
+  envios: EnvioCompleto[],
+  cobranca?: { whatsapp: string; email: string },
+) {
   return {
     resumo,
+    cobranca: {
+      whatsapp: cobranca?.whatsapp === 'repasse_plataforma' ? 'repasse_plataforma' : 'conta_clinica',
+      email: cobranca?.email === 'repasse_plataforma' ? 'repasse_plataforma' : 'conta_clinica',
+    },
     envios: envios.slice(0, 8).map(montarEnvio),
   };
 }

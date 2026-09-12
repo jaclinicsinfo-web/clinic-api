@@ -66,8 +66,17 @@ export async function obterDashboardIntegracoes(req: Request, res: Response, nex
     await garantirPadrao(clinicaId);
     const query = dashboardQuerySchema.parse(req.query);
     const filtro = { clinicaId, ...periodoFiltro(query), canal: query.canal, status: query.status, tipo: query.tipo };
-    const [resumo, envios] = await Promise.all([resumoDashboard(filtro), listarEnvios(filtro, 8)]);
-    res.json(montarDashboard(resumo, envios));
+    const [resumo, envios, config] = await Promise.all([
+      resumoDashboard(filtro),
+      listarEnvios(filtro, 8),
+      garantirPadrao(clinicaId),
+    ]);
+    res.json(
+      montarDashboard(resumo, envios, {
+        whatsapp: config?.whatsappCobrancaModo ?? 'conta_clinica',
+        email: config?.emailCobrancaModo ?? 'conta_clinica',
+      }),
+    );
   } catch (err) {
     next(err);
   }
@@ -98,6 +107,7 @@ export async function atualizarConfiguracaoIntegracoes(req: Request, res: Respon
     if (dados.whatsappWabaId !== undefined) patch.whatsappWabaId = dados.whatsappWabaId;
     if (dados.whatsappAppId !== undefined) patch.whatsappAppId = dados.whatsappAppId;
     if (dados.whatsappAmbiente) patch.whatsappAmbiente = dados.whatsappAmbiente;
+    if (dados.whatsappCobrancaModo) patch.whatsappCobrancaModo = dados.whatsappCobrancaModo;
     if (dados.whatsappAccessToken && !ehValorMascarado(dados.whatsappAccessToken)) {
       patch.whatsappAccessTokenCifrado = cifrarSegredo(dados.whatsappAccessToken);
     }
@@ -114,6 +124,7 @@ export async function atualizarConfiguracaoIntegracoes(req: Request, res: Respon
     if (dados.smtpRemetente !== undefined) patch.smtpRemetente = dados.smtpRemetente;
     if (dados.smtpRemetenteNome !== undefined) patch.smtpRemetenteNome = dados.smtpRemetenteNome;
     if (dados.smtpSeguro) patch.smtpSeguro = dados.smtpSeguro;
+    if (dados.emailCobrancaModo) patch.emailCobrancaModo = dados.emailCobrancaModo;
     if (dados.smtpSenha && !ehValorMascarado(dados.smtpSenha)) {
       patch.smtpSenhaCifrada = cifrarSegredo(dados.smtpSenha);
     }

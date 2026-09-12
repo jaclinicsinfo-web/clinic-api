@@ -48,3 +48,6 @@ export const CUSTOS_PADRAO: { canal: CanalLembrete; categoria: string }[] = [
   { canal: 'whatsapp', categoria: 'service' },
   { canal: 'email', categoria: 'padrao' },
 ];
+
+export const MODOS_COBRANCA = ['conta_clinica', 'repasse_plataforma'] as const;
+export type ModoCobranca = (typeof MODOS_COBRANCA)[number];

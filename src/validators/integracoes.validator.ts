@@ -30,6 +30,7 @@ export const configuracaoBodySchema = z.object({
   whatsappAppSecret: textoOpcional,
   whatsappVerifyToken: textoOpcional,
   whatsappAmbiente: z.enum(['producao', 'sandbox']).optional(),
+  whatsappCobrancaModo: z.enum(['conta_clinica', 'repasse_plataforma']).optional(),
   emailAtivo: z.boolean().optional(),
   smtpHost: textoOpcional,
   smtpPort: z.number().int().min(1).max(65535).optional().nullable(),
@@ -38,6 +39,7 @@ export const configuracaoBodySchema = z.object({
   smtpRemetente: textoOpcional,
   smtpRemetenteNome: textoOpcional,
   smtpSeguro: z.enum(['tls', 'ssl', 'none']).optional(),
+  emailCobrancaModo: z.enum(['conta_clinica', 'repasse_plataforma']).optional(),
 });
 
 export const testeWhatsappSchema = z.object({

@@ -795,6 +795,7 @@ model IntegracaoClinica {
   whatsappAppSecretCifrado   String?
   whatsappVerifyTokenCifrado String?
   whatsappAmbiente           String  @default("producao")
+  whatsappCobrancaModo       String  @default("conta_clinica")
 
   emailAtivo         Boolean @default(false)
   smtpHost           String?
@@ -804,6 +805,7 @@ model IntegracaoClinica {
   smtpRemetente      String?
   smtpRemetenteNome  String?
   smtpSeguro         String  @default("tls")
+  emailCobrancaModo  String  @default("conta_clinica")
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
