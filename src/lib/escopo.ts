@@ -1,7 +1,7 @@
 import { Request } from 'express';
 import { buscarPorId, UsuarioCompleto } from '../models/usuario.model';
 import { buscarPorUsuarioId } from '../models/profissional.model';
-import { NOME_PERFIL_PROFISSIONAL_SAUDE } from './perfis-padrao';
+import { NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_GESTOR, NOME_PERFIL_PROFISSIONAL_SAUDE } from './perfis-padrao';
 import { temAcessoAoModulo } from './permissoes';
 import { AppError } from './erros';
 
@@ -9,6 +9,10 @@ type UsuarioComPerfil = { perfil: { nome: string; permissoes: unknown } };
 
 export function ehProfissionalSaude(perfilNome: string) {
   return perfilNome === NOME_PERFIL_PROFISSIONAL_SAUDE;
+}
+
+export function ehAdminOuGestor(perfilNome: string) {
+  return perfilNome === NOME_PERFIL_ADMINISTRADOR || perfilNome === NOME_PERFIL_GESTOR;
 }
 
 export function podeVerProntuario(usuario: UsuarioComPerfil) {

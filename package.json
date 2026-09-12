@@ -13,7 +13,8 @@
     "start": "node dist/server.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "test": "node --require ts-node/register --test src/lib/segredo.test.ts src/lib/integracoes/lembretes.test.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

@@ -36,7 +36,7 @@ export function profissionalCompleto(profissional: ProfissionalCompleto) {
   };
 }
 
-export function montarListaProfissionais(profissionais: ProfissionalCompleto[]) {
+export function montarListaProfissionais(profissionais: ProfissionalCompleto[], incluirFinanceiro = true) {
   const comissionados = profissionais.filter((item) => Number(item.percentualComissao) > 0);
   return {
     profissionais: profissionais.map(profissionalCompleto),
@@ -46,7 +46,7 @@ export function montarListaProfissionais(profissionais: ProfissionalCompleto[]) 
       ativos: profissionais.filter((item) => item.status === 'ativo').length,
       especialidades: new Set(profissionais.flatMap((item) => item.especialidades)).size,
       comissaoMedia:
-        comissionados.length === 0
+        !incluirFinanceiro || comissionados.length === 0
           ? 0
           : comissionados.reduce((total, item) => total + Number(item.percentualComissao), 0) /
             comissionados.length,

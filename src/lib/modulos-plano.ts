@@ -4,6 +4,7 @@ export const MODULOS_NUCLEO = [
   'agenda',
   'profissionais',
   'convenios',
+  'rh',
   'configuracoes',
 ] as const;
 

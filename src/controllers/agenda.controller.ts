@@ -41,7 +41,7 @@ import { buscarPorIdEClinica as buscarConvenio, listarAtivosPorClinica as listar
 import { possuiAcessoUnidade } from '../models/usuario.model';
 import { carregarContextoClinico, exigirProfissionalVinculado, exigirUnidade } from '../lib/escopo';
 import { AppError } from '../lib/erros';
-import { dataDeIso, dinheiro, hojeCivil } from '../lib/datas';
+import { dataDeIso, dataCivil, dinheiro, hojeCivil } from '../lib/datas';
 import { profissionalCompleto } from '../views/profissionais.view';
 import { procedimentoResumo } from '../views/procedimentos.view';
 import { garantirDoAgendamento } from '../models/cobranca.model';
@@ -52,6 +52,7 @@ import {
   montarEspera,
   pacienteAgendaResumo,
 } from '../views/agenda.view';
+import { notificarEventoAgenda } from '../lib/integracoes/ganchos';
 
 function periodoPadrao(de?: string, ate?: string) {
   const hoje = hojeCivil();
@@ -269,6 +270,18 @@ export async function criarAgendamento(req: Request, res: Response, next: NextFu
       observacoes: dados.observacoes,
       criadoPorId: req.auth!.sub,
     });
+    notificarEventoAgenda({
+      agendamentoId: criado.id,
+      clinicaId,
+      evento: 'criado',
+    });
+    if (dados.status === 'confirmado') {
+      notificarEventoAgenda({
+        agendamentoId: criado.id,
+        clinicaId,
+        evento: 'confirmado',
+      });
+    }
     res.status(201).json(montarAgendamento(criado));
   } catch (err) {
     next(err);
@@ -312,6 +325,19 @@ export async function atualizarAgendamento(req: Request, res: Response, next: Ne
       status: dados.status,
       observacoes: dados.observacoes,
     });
+    const mudouHorario =
+      dataCivil(agendamento.data) !== dataCivil(atualizado.data) ||
+      agendamento.horaInicio !== atualizado.horaInicio ||
+      agendamento.profissionalId !== atualizado.profissionalId;
+    if (atualizado.status === 'cancelado' && agendamento.status !== 'cancelado') {
+      notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'cancelado' });
+    } else if (mudouHorario) {
+      notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'reagendado' });
+    } else if (atualizado.status === 'confirmado' && agendamento.status !== 'confirmado') {
+      notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'confirmado' });
+    } else {
+      notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'criado' });
+    }
     res.json(montarAgendamento(atualizado));
   } catch (err) {
     next(err);
@@ -344,6 +370,12 @@ export async function alterarStatusAgendamento(req: Request, res: Response, next
         particular: atualizado.particular,
         vencimento: atualizado.data,
       });
+    }
+    if (status === 'confirmado') {
+      notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'confirmado' });
+    }
+    if (status === 'cancelado') {
+      notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'cancelado' });
     }
     res.json(montarAgendamento(atualizado));
   } catch (err) {
@@ -385,6 +417,7 @@ export async function reagendarAgendamento(req: Request, res: Response, next: Ne
       horaFim: dados.horaFim,
       profissionalId,
     });
+    notificarEventoAgenda({ agendamentoId: atualizado.id, clinicaId: atualizado.clinicaId, evento: 'reagendado' });
     res.json(montarAgendamento(atualizado));
   } catch (err) {
     next(err);

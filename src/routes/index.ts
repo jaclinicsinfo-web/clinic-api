@@ -18,6 +18,9 @@ import estoqueRoutes from './estoque.routes';
 import notificacoesRoutes from './notificacoes.routes';
 import dashboardRoutes from './dashboard.routes';
 import relatoriosRoutes from './relatorios.routes';
+import rhRoutes from './rh.routes';
+import integracoesRoutes from './integracoes.routes';
+import webhooksRoutes from './webhooks.routes';
 
 const router = Router();
 
@@ -40,5 +43,8 @@ router.use('/estoque', estoqueRoutes);
 router.use('/notificacoes', notificacoesRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/relatorios', relatoriosRoutes);
+router.use('/rh', rhRoutes);
+router.use('/integracoes', integracoesRoutes);
+router.use('/webhooks', webhooksRoutes);
 
 export default router;

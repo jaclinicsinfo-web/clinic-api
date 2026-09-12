@@ -95,8 +95,9 @@ async function paraDados(
 
 export async function listarProfissionais(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const usuario = await carregarUsuario(req);
     const profissionais = await listarPorClinica(req.auth!.clinicaId);
-    res.json(montarListaProfissionais(profissionais));
+    res.json(montarListaProfissionais(profissionais, temAcessoAoModulo(usuario, 'financeiro', 'visualizar')));
   } catch (err) {
     next(err);
   }

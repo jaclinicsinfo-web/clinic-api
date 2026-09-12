@@ -212,6 +212,28 @@ O `usuario.model.criarUsuario()` **sempre** chama `assertPodeAdicionarUsuario` a
 um usuário ativo, retornando **403** com a mensagem
 _"Limite de usuários do plano atingido. Faça upgrade para adicionar mais contas."_ quando o plano estoura.
 
+## Integrações e lembretes
+
+Módulo do plano Ilimitado (`exigirPermissao('integracoes')`). Documentação de operação:
+`clinic-web-app/docs/integracoes-e-lembretes.md`.
+
+| Método | Rota | Auth |
+|--------|------|------|
+| GET | `/integracoes` | Bearer |
+| GET/PATCH | `/integracoes/configuracao` | Bearer |
+| POST | `/integracoes/whatsapp/teste` | Bearer |
+| POST | `/integracoes/email/teste` | Bearer |
+| GET/POST | `/integracoes/regras` | Bearer |
+| PATCH/DELETE | `/integracoes/regras/:id` | Bearer |
+| GET/POST | `/integracoes/templates` | Bearer |
+| PATCH/DELETE | `/integracoes/templates/:id` | Bearer |
+| GET | `/integracoes/custos` | Bearer |
+| GET | `/integracoes/envios` | Bearer |
+| POST | `/integracoes/processar` | Bearer |
+| GET/POST | `/webhooks/whatsapp/:clinicaId` | público (verify token / HMAC da Meta) |
+
+Credenciais ficam cifradas no banco. A resposta da API nunca devolve token ou senha completos.
+
 ## Pacientes
 
 `GET /pacientes` lista os pacientes da clínica, com resumo, convênios ativos e profissionais de saúde

@@ -150,7 +150,7 @@ export async function listarPacientes(
 ): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
-    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    const { usuario, somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
 
     if (somenteProprios && !profissionalIdEscopo) {
       res.json(
@@ -177,10 +177,13 @@ export async function listarPacientes(
       clinicaId,
       pacientes.map((item) => item.id),
     );
-    const saldoPorPaciente = await saldosPorPaciente(
-      clinicaId,
-      pacientes.map((item) => item.id),
-    );
+    const verFinanceiro = temAcessoAoModulo(usuario, 'financeiro', 'visualizar');
+    const saldoPorPaciente = verFinanceiro
+      ? await saldosPorPaciente(
+          clinicaId,
+          pacientes.map((item) => item.id),
+        )
+      : undefined;
 
     res.json(
       montarListaPacientes({

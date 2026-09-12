@@ -4,6 +4,7 @@ declare global {
   namespace Express {
     interface Request {
       auth?: PayloadToken;
+      rawBody?: Buffer;
     }
   }
 }

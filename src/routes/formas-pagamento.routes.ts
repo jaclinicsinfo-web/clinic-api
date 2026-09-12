@@ -7,7 +7,7 @@ const router = Router();
 
 router.use(autenticar);
 
-router.get('/', listarFormasPagamento);
-router.put('/', exigirPermissao('configuracoes', 'editar'), salvarFormasPagamento);
+router.get('/', exigirPermissao('financeiro', 'visualizar'), listarFormasPagamento);
+router.put('/', exigirPermissao('financeiro', 'editar'), salvarFormasPagamento);
 
 export default router;

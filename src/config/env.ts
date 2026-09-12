@@ -26,6 +26,16 @@ function planoDaClinica(): CodigoPlano {
   return bruto as CodigoPlano;
 }
 
+function dinheiroDaEnv(nome: string, padrao = 0): number {
+  const bruto = process.env[nome]?.trim();
+  if (!bruto) return padrao;
+  const valor = Number(bruto.replace(',', '.'));
+  if (!Number.isFinite(valor) || valor < 0) {
+    throw new Error(`Variável de ambiente ${nome} inválida: "${bruto}". Use um valor >= 0.`);
+  }
+  return Math.round(valor * 10000) / 10000;
+}
+
 function origensCors(): string[] {
   const daEnv = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002')
     .split(',')
@@ -64,6 +74,18 @@ export const env = {
   SMTP_USER: process.env.SMTP_USER?.trim() || '',
   SMTP_PASS: process.env.SMTP_PASS ?? '',
   SMTP_FROM: process.env.SMTP_FROM?.trim() || '',
+
+  API_PUBLIC_URL: process.env.API_PUBLIC_URL?.trim().replace(/\/+$/, '') || '',
+  CREDENTIALS_KEY: process.env.CREDENTIALS_KEY?.trim() || '',
+  META_GRAPH_VERSION: process.env.META_GRAPH_VERSION?.trim() || 'v21.0',
+  INTEGRACOES_INTERVALO_MS: Number(process.env.INTEGRACOES_INTERVALO_MS ?? 60_000),
+
+  /** Tabela de repasse. Definida no deploy — a clínica não edita. */
+  CUSTO_WHATSAPP_UTILITY: dinheiroDaEnv('CUSTO_WHATSAPP_UTILITY'),
+  CUSTO_WHATSAPP_MARKETING: dinheiroDaEnv('CUSTO_WHATSAPP_MARKETING'),
+  CUSTO_WHATSAPP_AUTHENTICATION: dinheiroDaEnv('CUSTO_WHATSAPP_AUTHENTICATION'),
+  CUSTO_WHATSAPP_SERVICE: dinheiroDaEnv('CUSTO_WHATSAPP_SERVICE'),
+  CUSTO_EMAIL: dinheiroDaEnv('CUSTO_EMAIL'),
 } as const;
 
 export const isDev = env.NODE_ENV === 'development';

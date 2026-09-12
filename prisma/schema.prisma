@@ -64,6 +64,13 @@ model Clinica {
   produtosEstoque      ProdutoEstoque[]
   movimentacoesEstoque MovimentacaoEstoque[]
   notificacoes         Notificacao[]
+  registrosPonto       RegistroPonto[]
+  holerites            Holerite[]
+  integracao           IntegracaoClinica?
+  regrasLembrete       RegraLembrete[]
+  templatesMensagem    TemplateMensagem[]
+  custosEnvio          CustoEnvio[]
+  enviosLembrete       EnvioLembrete[]
 
   @@map("clinicas")
 }
@@ -125,6 +132,10 @@ model Usuario {
   recuperacoesSenha       RecuperacaoSenha[]
   notificacoes            Notificacao[]
   movimentacoesEstoque    MovimentacaoEstoque[]
+  registrosPonto          RegistroPonto[] @relation("PontoUsuario")
+  pontosRegistrados       RegistroPonto[] @relation("PontoRegistradoPor")
+  holerites               Holerite[]      @relation("HoleriteUsuario")
+  holeritesEnviados       Holerite[]      @relation("HoleriteCriadoPor")
 
   @@map("usuarios")
 }
@@ -355,6 +366,7 @@ model Agendamento {
   criadoPor    Usuario       @relation("AgendamentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
   atendimento  Atendimento?
   cobranca     Cobranca?
+  enviosLembrete EnvioLembrete[]
 
   @@index([clinicaId, data])
   @@index([clinicaId, profissionalId, data])
@@ -722,4 +734,189 @@ model Notificacao {
   @@unique([usuarioId, chave])
   @@index([usuarioId, lidaEm, criadoEm])
   @@map("notificacoes")
+}
+
+model RegistroPonto {
+  id               String    @id @default(uuid()) @db.Uuid
+  clinicaId        String    @db.Uuid
+  usuarioId        String    @db.Uuid
+  data             DateTime  @db.Date
+  entrada          String?
+  saidaIntervalo   String?
+  retornoIntervalo String?
+  saida            String?
+  observacao       String?
+  origem           String    @default("manual")
+  registradoPorId  String    @db.Uuid
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  clinica       Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  usuario       Usuario @relation("PontoUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+  registradoPor Usuario @relation("PontoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: Restrict)
+
+  @@unique([clinicaId, usuarioId, data])
+  @@index([clinicaId, data])
+  @@map("registros_ponto")
+}
+
+model Holerite {
+  id          String   @id @default(uuid()) @db.Uuid
+  clinicaId   String   @db.Uuid
+  usuarioId   String   @db.Uuid
+  competencia String
+  nomeArquivo String
+  mimeType    String
+  tamanhoKb   Int
+  conteudo    Bytes
+  criadoPorId String   @db.Uuid
+  criadoEm    DateTime @default(now())
+
+  clinica   Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  usuario   Usuario @relation("HoleriteUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+  criadoPor Usuario @relation("HoleriteCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+
+  @@unique([clinicaId, usuarioId, competencia])
+  @@index([clinicaId, competencia])
+  @@map("holerites")
+}
+
+model IntegracaoClinica {
+  id        String @id @default(uuid()) @db.Uuid
+  clinicaId String @unique @db.Uuid
+
+  lembretesAtivos Boolean @default(false)
+
+  whatsappAtivo              Boolean @default(false)
+  whatsappPhoneNumberId      String?
+  whatsappWabaId             String?
+  whatsappAppId              String?
+  whatsappAccessTokenCifrado String?
+  whatsappAppSecretCifrado   String?
+  whatsappVerifyTokenCifrado String?
+  whatsappAmbiente           String  @default("producao")
+
+  emailAtivo         Boolean @default(false)
+  smtpHost           String?
+  smtpPort           Int?
+  smtpUsuario        String?
+  smtpSenhaCifrada   String?
+  smtpRemetente      String?
+  smtpRemetenteNome  String?
+  smtpSeguro         String  @default("tls")
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+
+  @@map("integracoes_clinica")
+}
+
+model RegraLembrete {
+  id                   String  @id @default(uuid()) @db.Uuid
+  clinicaId            String  @db.Uuid
+  nome                 String
+  tipo                 String
+  antecedenciaMinutos  Int?
+  destinatarios        String
+  canais               String[]
+  templateWhatsappId   String? @db.Uuid
+  templateEmailId      String? @db.Uuid
+  ativo                Boolean @default(true)
+  sistema              Boolean @default(false)
+  ordem                Int     @default(0)
+  criadoEm             DateTime @default(now())
+  atualizadoEm         DateTime @updatedAt
+
+  clinica          Clinica            @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  templateWhatsapp TemplateMensagem?  @relation("RegraTemplateWhatsapp", fields: [templateWhatsappId], references: [id], onDelete: SetNull)
+  templateEmail    TemplateMensagem?  @relation("RegraTemplateEmail", fields: [templateEmailId], references: [id], onDelete: SetNull)
+  envios           EnvioLembrete[]
+
+  @@index([clinicaId, ativo])
+  @@map("regras_lembrete")
+}
+
+model TemplateMensagem {
+  id                    String  @id @default(uuid()) @db.Uuid
+  clinicaId             String  @db.Uuid
+  canal                 String
+  tipo                  String
+  nome                  String
+  assunto               String?
+  corpo                 String
+  whatsappNomeTemplate  String?
+  whatsappIdioma        String  @default("pt_BR")
+  whatsappCategoria     String  @default("utility")
+  ativo                 Boolean @default(true)
+  sistema               Boolean @default(false)
+  criadoEm              DateTime @default(now())
+  atualizadoEm          DateTime @updatedAt
+
+  clinica            Clinica         @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  regrasWhatsapp     RegraLembrete[] @relation("RegraTemplateWhatsapp")
+  regrasEmail        RegraLembrete[] @relation("RegraTemplateEmail")
+  envios             EnvioLembrete[]
+
+  @@index([clinicaId, canal])
+  @@map("templates_mensagem")
+}
+
+model CustoEnvio {
+  id        String  @id @default(uuid()) @db.Uuid
+  clinicaId String  @db.Uuid
+  canal     String
+  categoria String
+  valor     Decimal @db.Decimal(12, 4)
+  moeda     String  @default("BRL")
+  ativo     Boolean @default(true)
+  criadoEm  DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicaId, canal, categoria])
+  @@index([clinicaId])
+  @@map("custos_envio")
+}
+
+model EnvioLembrete {
+  id                  String    @id @default(uuid()) @db.Uuid
+  clinicaId           String    @db.Uuid
+  agendamentoId       String    @db.Uuid
+  regraId             String?   @db.Uuid
+  templateId          String?   @db.Uuid
+  canal               String
+  destinatarioTipo    String
+  destinatarioId      String
+  destinatarioNome    String
+  destinatarioContato String
+  tipoLembrete        String
+  status              String
+  chaveIdempotencia   String
+  provedorMessageId   String?
+  erro                String?
+  custo               Decimal   @default(0) @db.Decimal(12, 4)
+  custoEstimado       Boolean   @default(true)
+  tentativas          Int       @default(0)
+  processarEm         DateTime
+  enviadoEm           DateTime?
+  entregueEm          DateTime?
+  lidoEm              DateTime?
+  metadados           Json?
+  criadoEm            DateTime  @default(now())
+  atualizadoEm        DateTime  @updatedAt
+
+  clinica     Clinica           @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  agendamento Agendamento       @relation(fields: [agendamentoId], references: [id], onDelete: Restrict)
+  regra       RegraLembrete?    @relation(fields: [regraId], references: [id], onDelete: SetNull)
+  template    TemplateMensagem? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@unique([clinicaId, chaveIdempotencia])
+  @@index([clinicaId, status, processarEm])
+  @@index([clinicaId, criadoEm])
+  @@index([agendamentoId])
+  @@index([provedorMessageId])
+  @@map("envios_lembrete")
 }

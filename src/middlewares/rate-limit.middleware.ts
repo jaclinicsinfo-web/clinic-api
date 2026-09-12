@@ -34,3 +34,13 @@ export const limiteRecuperacao = criarLimiter(
   5,
   'Muitas tentativas de recuperação de senha. Tente novamente em alguns minutos.',
 );
+
+export const limiteWebhookWhatsapp = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(montarErro('Muitas requisições no webhook. Tente novamente em instantes.'));
+  },
+});

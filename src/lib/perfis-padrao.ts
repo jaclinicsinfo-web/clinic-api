@@ -16,6 +16,7 @@ export const MODULOS = [
   'convenios',
   'estoque',
   'relatorios',
+  'rh',
   'configuracoes',
   'integracoes',
   'powerbi',
@@ -85,8 +86,9 @@ const gestor: PerfilPadrao = {
     convenios: acoes(true, true, true, true),
     estoque: acoes(true, true, true, true),
     relatorios: acoes(true, false, false, false),
+    rh: acoes(true, true, true, true),
     configuracoes: acoes(true, false, false, false),
-    integracoes: acoes(true),
+    integracoes: acoes(true, true, true, true),
     powerbi: acoes(true),
     agenteia: acoes(true),
   }),
@@ -102,6 +104,7 @@ const recepcao: PerfilPadrao = {
     profissionais: acoes(true, false, false, false),
     financeiro: acoes(true, true, false, false),
     convenios: acoes(true, false, false, false),
+    rh: acoes(true, true, false, false),
   }),
 };
 
@@ -114,6 +117,7 @@ const profissionalSaude: PerfilPadrao = {
     agenda: acoes(true, true, true, false),
     convenios: acoes(true, false, false, false),
     estoque: acoes(true, false, false, false),
+    rh: acoes(true, true, false, false),
   }),
 };
 
@@ -129,6 +133,7 @@ const financeiro: PerfilPadrao = {
     convenios: acoes(true, true, true, true),
     estoque: acoes(true, false, false, false),
     relatorios: acoes(true, false, false, false),
+    rh: acoes(true, true, false, false),
     configuracoes: acoes(false, false, false, false),
   }),
 };

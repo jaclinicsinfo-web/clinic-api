@@ -18,6 +18,8 @@ import {
 import { idsPertencemAClinica, listarAtivosPorClinica } from '../models/procedimento.model';
 import { AppError } from '../lib/erros';
 import { dinheiro } from '../lib/datas';
+import { carregarUsuario } from '../lib/escopo';
+import { temAcessoAoModulo } from '../lib/permissoes';
 import { montarConvenio, montarDetalheConvenio, montarListaConvenios } from '../views/convenios.view';
 
 function inicioFimMesAtual() {
@@ -48,7 +50,9 @@ export async function listarConvenios(req: Request, res: Response, next: NextFun
 export async function obterConvenio(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const convenio = await carregarConvenio(req);
+    const usuario = await carregarUsuario(req);
     const clinicaId = req.auth!.clinicaId;
+    const verFinanceiro = temAcessoAoModulo(usuario, 'financeiro', 'visualizar');
     const { inicio, fim } = inicioFimMesAtual();
     const [indicadores, pacientes, procedimentos] = await Promise.all([
       indicadoresDoMes(convenio.id, clinicaId, inicio, fim),
@@ -59,7 +63,9 @@ export async function obterConvenio(req: Request, res: Response, next: NextFunct
     res.json(
       montarDetalheConvenio({
         convenio,
-        indicadores,
+        indicadores: verFinanceiro
+          ? indicadores
+          : { ...indicadores, faturamentoMes: 0, taxaGlosa: 0 },
         pacientes,
         procedimentos: procedimentos.map((item) => ({
           id: item.id,

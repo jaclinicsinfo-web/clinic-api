@@ -2,6 +2,7 @@ import { criarApp } from './app';
 import { env } from './config/env';
 import { conectarBanco, desconectarBanco } from './config/database';
 import { aplicarMigracoes } from './lib/migracoes';
+import { iniciarProcessadorLembretes } from './lib/integracoes/processador';
 
 async function iniciar(): Promise<void> {
   const noRender = process.env.RENDER === 'true' || env.NODE_ENV === 'production';
@@ -34,10 +35,13 @@ async function iniciar(): Promise<void> {
     console.log(`ClinicERP API rodando em http://localhost:${env.PORT}/api (${env.NODE_ENV})`);
   });
 
+  const processador = iniciarProcessadorLembretes(env.INTEGRACOES_INTERVALO_MS);
+
   const encerrar = async (sinal: string): Promise<void> => {
     // eslint-disable-next-line no-console
     console.log(`\nRecebido ${sinal}, encerrando...`);
     server.close(async () => {
+      clearInterval(processador);
       await desconectarBanco();
       process.exit(0);
     });

@@ -24,7 +24,15 @@ export function criarApp(): Application {
     }),
   );
 
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify(req, _res, buf) {
+        if (req.url?.includes('/webhooks/whatsapp')) {
+          (req as { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true }));
 
   app.disable('x-powered-by');

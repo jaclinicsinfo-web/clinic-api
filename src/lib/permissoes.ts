@@ -1,5 +1,5 @@
 import { env } from '../config/env';
-import { AcoesModulo, MODULOS, NOME_PERFIL_ADMINISTRADOR, Permissoes, todasTrue } from './perfis-padrao';
+import { AcoesModulo, MODULOS, NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_GESTOR, Permissoes, todasTrue } from './perfis-padrao';
 import { mensagemModuloForaDoPlano, planoIncluiModulo } from './modulos-plano';
 
 export type AcaoPermissao = keyof AcoesModulo;
@@ -69,7 +69,17 @@ export function montarPermissoesDoPerfil(perfil: { nome: string; permissoes: unk
   if (perfil.nome === NOME_PERFIL_ADMINISTRADOR) {
     return montarPermissoes(todasTrue());
   }
-  return montarPermissoes(perfil.permissoes);
+
+  return montarPermissoes(perfil.permissoes).map((item) => {
+    if (item.modulo === 'integracoes' && perfil.nome === NOME_PERFIL_GESTOR) {
+      return { modulo: 'integracoes', visualizar: true, criar: true, editar: true, excluir: true };
+    }
+    if (item.modulo !== 'rh') return item;
+    if (perfil.nome === NOME_PERFIL_GESTOR) {
+      return { modulo: 'rh', visualizar: true, criar: true, editar: true, excluir: true };
+    }
+    return { ...item, visualizar: true, criar: true };
+  });
 }
 
 export function permissoesEfetivas(perfil: { nome: string; permissoes: unknown }): PermissaoItem[] {
