@@ -15,7 +15,7 @@ export function destinatariosDaRegra(destinatarios: string): TipoDestinatario[] 
 }
 
 export function canaisDaRegra(canais: string[]): CanalLembrete[] {
-  return canais.filter((canal): canal is CanalLembrete => canal === 'whatsapp' || canal === 'email');
+  return canais.filter((canal): canal is CanalLembrete => canal === 'whatsapp');
 }
 
 export function chaveIdempotencia(params: {

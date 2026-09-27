@@ -12,8 +12,7 @@ import {
 import { carregarAgendamentoMotor, varrerAntecedencias } from './motor';
 import { dataCivil } from '../datas';
 import { formatarDataPt, interpolarTexto, parametrosWhatsapp } from './placeholders';
-import { emailValido, normalizarTelefoneWhatsapp } from './regras';
-import { enviarEmailCanal } from './email-canal';
+import { normalizarTelefoneWhatsapp } from './regras';
 import { enviarTemplateWhatsapp } from './whatsapp-meta';
 
 let ocupado = false;
@@ -25,18 +24,6 @@ function credenciaisWhatsapp(config: NonNullable<Awaited<ReturnType<typeof obter
     accessToken,
     phoneNumberId: config.whatsappPhoneNumberId,
     appSecret: decifrarSegredo(config.whatsappAppSecretCifrado),
-  };
-}
-
-function smtpDaConfig(config: NonNullable<Awaited<ReturnType<typeof obterConfiguracao>>>) {
-  return {
-    host: config.smtpHost,
-    port: config.smtpPort,
-    usuario: config.smtpUsuario,
-    senha: decifrarSegredo(config.smtpSenhaCifrada),
-    remetente: config.smtpRemetente,
-    remetenteNome: config.smtpRemetenteNome,
-    seguro: config.smtpSeguro,
   };
 }
 
@@ -140,41 +127,10 @@ async function processarUm(id: string): Promise<void> {
     return;
   }
 
-  if (!config.emailAtivo) {
-    await atualizarEnvio(envio.id, { status: 'falhou', erro: 'Integração de e-mail desativada.' });
-    return;
-  }
-  const para =
-    emailValido(envio.destinatarioContato) ||
-    (envio.destinatarioTipo === 'paciente'
-      ? emailValido(agendamento.paciente.email)
-      : emailValido(agendamento.profissional.email));
-  if (!para) {
-    await atualizarEnvio(envio.id, {
-      status: 'falhou',
-      erro:
-        envio.destinatarioTipo === 'paciente'
-          ? 'Paciente sem e-mail cadastrado.'
-          : 'Profissional sem e-mail cadastrado.',
-    });
-    return;
-  }
-
-  const assunto = interpolarTexto(template?.assunto || 'Lembrete de consulta', contexto);
-  const texto = interpolarTexto(template?.corpo || '', contexto);
-  const resultado = await enviarEmailCanal(smtpDaConfig(config), { para, assunto, texto });
-  const custo = resultado.ok ? await custoDoEnvio(envio.clinicaId, 'email', 'padrao') : 0;
   await atualizarEnvio(envio.id, {
-    status: resultado.ok ? 'enviado' : 'falhou',
-    provedorMessageId: resultado.provedorMessageId,
-    erro: resultado.ok ? null : resultado.erro,
-    destinatarioContato: para,
-    custo,
-    custoEstimado: config.emailCobrancaModo !== 'repasse_plataforma',
-    enviadoEm: resultado.ok ? new Date() : null,
-    metadados: { preview: texto, assunto } as Prisma.InputJsonValue,
+    status: 'cancelado',
+    erro: 'Lembretes por e-mail não são enviados.',
   });
-  if (resultado.ok) await marcarLembreteAgendamento(envio.agendamentoId);
 }
 
 export async function processarFilaEnvios(): Promise<number> {

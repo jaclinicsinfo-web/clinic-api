@@ -22,7 +22,6 @@ import {
 import { listarCustos } from '../models/custo-envio.model';
 import { buscarEnvio, listarEnvios, resumoDashboard } from '../models/envio-lembrete.model';
 import { processarFilaEnvios } from '../lib/integracoes/processador';
-import { enviarEmailCanal, testarSmtp } from '../lib/integracoes/email-canal';
 import { enviarTemplateWhatsapp, testarConexaoWhatsapp } from '../lib/integracoes/whatsapp-meta';
 import { normalizarTelefoneWhatsapp } from '../lib/integracoes/regras';
 import {
@@ -32,7 +31,6 @@ import {
   idParamSchema,
   regraBodySchema,
   templateBodySchema,
-  testeEmailSchema,
   testeWhatsappSchema,
 } from '../validators/integracoes.validator';
 import {
@@ -117,17 +115,6 @@ export async function atualizarConfiguracaoIntegracoes(req: Request, res: Respon
     if (dados.whatsappVerifyToken && !ehValorMascarado(dados.whatsappVerifyToken)) {
       patch.whatsappVerifyTokenCifrado = cifrarSegredo(dados.whatsappVerifyToken);
     }
-    if (dados.emailAtivo != null) patch.emailAtivo = dados.emailAtivo;
-    if (dados.smtpHost !== undefined) patch.smtpHost = dados.smtpHost;
-    if (dados.smtpPort !== undefined) patch.smtpPort = dados.smtpPort;
-    if (dados.smtpUsuario !== undefined) patch.smtpUsuario = dados.smtpUsuario;
-    if (dados.smtpRemetente !== undefined) patch.smtpRemetente = dados.smtpRemetente;
-    if (dados.smtpRemetenteNome !== undefined) patch.smtpRemetenteNome = dados.smtpRemetenteNome;
-    if (dados.smtpSeguro) patch.smtpSeguro = dados.smtpSeguro;
-    if (dados.emailCobrancaModo) patch.emailCobrancaModo = dados.emailCobrancaModo;
-    if (dados.smtpSenha && !ehValorMascarado(dados.smtpSenha)) {
-      patch.smtpSenhaCifrada = cifrarSegredo(dados.smtpSenha);
-    }
 
     const salvo = await salvarConfiguracao(clinicaId, patch);
     res.json(montarConfiguracao(salvo, { webhookUrl: urlWebhook(req, clinicaId), clinicaId }));
@@ -177,39 +164,13 @@ export async function testarWhatsapp(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function testarEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const clinicaId = req.auth!.clinicaId;
-    const { para } = testeEmailSchema.parse(req.body);
-    const config = await obterConfiguracao(clinicaId);
-    const smtp = {
-      host: config?.smtpHost,
-      port: config?.smtpPort,
-      usuario: config?.smtpUsuario,
-      senha: decifrarSegredo(config?.smtpSenhaCifrada),
-      remetente: config?.smtpRemetente,
-      remetenteNome: config?.smtpRemetenteNome,
-      seguro: config?.smtpSeguro,
-    };
-    const conexao = await testarSmtp(smtp);
-    if (!conexao.ok) throw new AppError(400, conexao.erro ?? 'Falha ao conectar no SMTP.');
-    const envio = await enviarEmailCanal(smtp, {
-      para,
-      assunto: 'Teste de integração — J.A. Clinics',
-      texto: 'Este é um e-mail de teste da integração de lembretes.',
-    });
-    if (!envio.ok) throw new AppError(400, envio.erro ?? 'Falha ao enviar o e-mail de teste.');
-    res.json({ ok: true, message: 'E-mail de teste enviado.' });
-  } catch (err) {
-    next(err);
-  }
-}
-
 export async function obterRegras(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     await garantirPadrao(req.auth!.clinicaId);
     const regras = await listarRegras(req.auth!.clinicaId);
-    res.json({ regras: regras.map(montarRegra) });
+    res.json({
+      regras: regras.filter((regra) => regra.canais.includes('whatsapp')).map(montarRegra),
+    });
   } catch (err) {
     next(err);
   }
@@ -280,7 +241,7 @@ export async function obterTemplates(req: Request, res: Response, next: NextFunc
   try {
     await garantirPadrao(req.auth!.clinicaId);
     const templates = await listarTemplates(req.auth!.clinicaId);
-    res.json({ templates: templates.map(montarTemplate) });
+    res.json({ templates: templates.filter((item) => item.canal === 'whatsapp').map(montarTemplate) });
   } catch (err) {
     next(err);
   }
@@ -408,12 +369,6 @@ async function validarTemplatesRegra(
     const template = await buscarTemplate(dados.templateWhatsappId, clinicaId);
     if (!template || template.canal !== 'whatsapp') {
       throw new AppError(400, 'Template de WhatsApp inválido.');
-    }
-  }
-  if (dados.canais.includes('email') && dados.templateEmailId) {
-    const template = await buscarTemplate(dados.templateEmailId, clinicaId);
-    if (!template || template.canal !== 'email') {
-      throw new AppError(400, 'Template de e-mail inválido.');
     }
   }
 }

@@ -46,18 +46,6 @@ export function montarConfiguracao(
       verifyTokenMascarado: mascararPresente(config.whatsappVerifyTokenCifrado),
       cobrancaModo: config.whatsappCobrancaModo === 'repasse_plataforma' ? 'repasse_plataforma' : 'conta_clinica',
     },
-    email: {
-      ativo: config.emailAtivo,
-      configurado: Boolean(config.smtpHost && config.smtpRemetente),
-      smtpHost: config.smtpHost,
-      smtpPort: config.smtpPort,
-      smtpUsuario: config.smtpUsuario,
-      smtpSenhaMascarada: mascararPresente(config.smtpSenhaCifrada),
-      smtpRemetente: config.smtpRemetente,
-      smtpRemetenteNome: config.smtpRemetenteNome,
-      smtpSeguro: config.smtpSeguro,
-      cobrancaModo: config.emailCobrancaModo === 'repasse_plataforma' ? 'repasse_plataforma' : 'conta_clinica',
-    },
   };
 }
 
@@ -82,7 +70,7 @@ export function montarRegra(regra: {
     tipo: regra.tipo,
     antecedenciaMinutos: regra.antecedenciaMinutos,
     destinatarios: regra.destinatarios,
-    canais: regra.canais,
+    canais: regra.canais.filter((canal) => canal === 'whatsapp'),
     templateWhatsappId: regra.templateWhatsappId,
     templateEmailId: regra.templateEmailId,
     templateWhatsappNome: regra.templateWhatsapp?.nome ?? null,

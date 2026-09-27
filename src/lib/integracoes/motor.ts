@@ -79,8 +79,8 @@ function canalHabilitado(
   canal: 'whatsapp' | 'email',
   config: { whatsappAtivo: boolean; emailAtivo: boolean } | null,
 ) {
-  if (!config) return false;
-  return canal === 'whatsapp' ? config.whatsappAtivo : config.emailAtivo;
+  if (!config || canal !== 'whatsapp') return false;
+  return config.whatsappAtivo;
 }
 
 async function enfileirarRegra(params: {

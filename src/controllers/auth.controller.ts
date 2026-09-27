@@ -18,8 +18,8 @@ import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
 import { usoDaClinica, sincronizarPlanoDoDeploy } from '../models/plano.model';
 import { assinarToken } from '../lib/jwt';
 import { conferirSenha } from '../lib/password';
-import { enviarEmail } from '../lib/email';
-import { env } from '../config/env';
+import { enviarEmail, montarEmailRedefinirSenha } from '../lib/email';
+import { env, isDev } from '../config/env';
 import { AppError } from '../lib/erros';
 import {
   montarSessao,
@@ -188,12 +188,26 @@ export async function solicitarRecuperacao(
       const token = await criarRecuperacao(usuario.id);
       const link = `${env.FRONTEND_URL.replace(/\/+$/, '')}/redefinir-senha?token=${token}`;
 
-      await enviarEmail({
-        para: usuario.email,
-        assunto: 'Redefinição de senha — J.A. Clinics',
-        texto: `Olá, ${usuario.nome}. Use este link para redefinir sua senha (válido por 1 hora):\n${link}`,
-        html: `<p>Olá, ${usuario.nome}.</p><p>Use o link abaixo para redefinir sua senha. Ele vale por 1 hora.</p><p><a href="${link}">${link}</a></p><p>Se você não pediu isso, ignore este e-mail.</p>`,
+      const mensagem = montarEmailRedefinirSenha({
+        nome: usuario.nome,
+        empresa: usuario.clinica.nomeFantasia,
+        email: usuario.email,
+        link,
+        validadeMinutos: 60,
       });
+
+      try {
+        await enviarEmail({
+          para: usuario.email,
+          categoria: 'redefinir-senha',
+          ...mensagem,
+        });
+      } catch (err) {
+        if (isDev) {
+          console.info('[email] link de recuperação (apenas desenvolvimento):', link);
+        }
+        throw err;
+      }
     }
 
     res.json({ mensagem: MENSAGEM_RECUPERACAO });

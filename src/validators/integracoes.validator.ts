@@ -31,23 +31,10 @@ export const configuracaoBodySchema = z.object({
   whatsappVerifyToken: textoOpcional,
   whatsappAmbiente: z.enum(['producao', 'sandbox']).optional(),
   whatsappCobrancaModo: z.enum(['conta_clinica', 'repasse_plataforma']).optional(),
-  emailAtivo: z.boolean().optional(),
-  smtpHost: textoOpcional,
-  smtpPort: z.number().int().min(1).max(65535).optional().nullable(),
-  smtpUsuario: textoOpcional,
-  smtpSenha: textoOpcional,
-  smtpRemetente: textoOpcional,
-  smtpRemetenteNome: textoOpcional,
-  smtpSeguro: z.enum(['tls', 'ssl', 'none']).optional(),
-  emailCobrancaModo: z.enum(['conta_clinica', 'repasse_plataforma']).optional(),
 });
 
 export const testeWhatsappSchema = z.object({
   para: z.string().min(10, 'Informe um número de WhatsApp válido.'),
-});
-
-export const testeEmailSchema = z.object({
-  para: z.string().email('Informe um e-mail válido.'),
 });
 
 export const regraBodySchema = z.object({
@@ -55,7 +42,7 @@ export const regraBodySchema = z.object({
   tipo: z.enum(TIPOS_LEMBRETE),
   antecedenciaMinutos: z.number().int().min(1).max(60 * 24 * 14).optional().nullable(),
   destinatarios: z.enum(DESTINATARIOS_LEMBRETE),
-  canais: z.array(z.enum(CANAIS_LEMBRETE)).min(1, 'Selecione ao menos um canal.'),
+  canais: z.array(z.literal('whatsapp')).min(1, 'Selecione o WhatsApp.'),
   templateWhatsappId: z.string().uuid().optional().nullable(),
   templateEmailId: z.string().uuid().optional().nullable(),
   ativo: z.boolean().optional(),
@@ -68,24 +55,17 @@ export const regraBodySchema = z.object({
       path: ['antecedenciaMinutos'],
     });
   }
-  if (dados.canais.includes('whatsapp') && !dados.templateWhatsappId) {
+  if (!dados.templateWhatsappId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Selecione o template de WhatsApp.',
       path: ['templateWhatsappId'],
     });
   }
-  if (dados.canais.includes('email') && !dados.templateEmailId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Selecione o template de e-mail.',
-      path: ['templateEmailId'],
-    });
-  }
 });
 
 export const templateBodySchema = z.object({
-  canal: z.enum(CANAIS_LEMBRETE),
+  canal: z.literal('whatsapp'),
   tipo: z.enum(TIPOS_LEMBRETE),
   nome: z.string().trim().min(3, 'Informe o nome do template.'),
   assunto: textoOpcional,
