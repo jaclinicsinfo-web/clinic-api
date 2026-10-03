@@ -9,7 +9,7 @@ export function notificarEventoAgenda(params: {
   void dispararEventoAgenda(params)
     .then(async () => {
       if (params.evento !== 'criado') {
-        await processarFilaEnvios();
+        await processarFilaEnvios(params.clinicaId);
       }
     })
     .catch((err) => {

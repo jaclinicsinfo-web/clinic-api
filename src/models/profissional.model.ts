@@ -1,7 +1,6 @@
-import { Prisma, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
+import { Prisma } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../config/database';
+import { transacao } from '../lib/tenant';
 
 const incluir = {
   usuario: { select: { id: true, nome: true, email: true } },
@@ -86,10 +85,11 @@ export async function cpfJaExiste(clinicaId: string, cpf: string, excetoId?: str
   return existente !== null;
 }
 
-export async function usuarioJaVinculado(usuarioId: string, excetoId?: string) {
+export async function usuarioJaVinculado(usuarioId: string, clinicaId: string, excetoId?: string) {
   const existente = await prisma.profissional.findFirst({
     where: {
       usuarioId,
+      clinicaId,
       ...(excetoId ? { id: { not: excetoId } } : {}),
     },
     select: { id: true },
@@ -124,7 +124,7 @@ async function persistir(
 
   const profissional = id
     ? await tx.profissional.update({
-        where: { id },
+        where: { id, clinicaId: dados.clinicaId },
         data: {
           ...payload,
           procedimentos: { deleteMany: {} },
@@ -154,22 +154,26 @@ async function persistir(
   }
 
   return tx.profissional.findUniqueOrThrow({
-    where: { id: profissional.id },
+    where: { id: profissional.id, clinicaId: dados.clinicaId },
     include: incluir,
   });
 }
 
 export async function criar(dados: DadosProfissional): Promise<ProfissionalCompleto> {
-  return prisma.$transaction((tx) => persistir(dados, undefined, tx));
+  return transacao((tx) => persistir(dados, undefined, tx));
 }
 
 export async function atualizar(id: string, dados: DadosProfissional): Promise<ProfissionalCompleto> {
-  return prisma.$transaction((tx) => persistir(dados, id, tx));
+  return transacao((tx) => persistir(dados, id, tx));
 }
 
-export async function alterarStatus(id: string, status: string): Promise<ProfissionalCompleto> {
+export async function alterarStatus(
+  id: string,
+  clinicaId: string,
+  status: string,
+): Promise<ProfissionalCompleto> {
   return prisma.profissional.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status },
     include: incluir,
   });

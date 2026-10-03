@@ -5,8 +5,8 @@ Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, *
 **pacientes** e o **catálogo de planos** com limite de contas.
 
 > Não existe portal do paciente. Não há sign-up aberto. A primeira clínica e o administrador nascem no
-> painel (`POST /api/setup`) quando o banco está vazio. O plano vem da variável `PLANO` na API. Os
-> demais usuários entram em Configurações › Usuários.
+> painel (`POST /api/setup`) quando o banco está vazio. `PLANO` vale só para essa primeira clínica.
+> Clínicas novas entram por `POST /api/cadastro`. Os demais usuários entram em Configurações › Usuários.
 
 ## Conceitos importantes
 
@@ -18,8 +18,15 @@ Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, *
 - **5 perfis = papéis RBAC**, criados por clínica no cadastro: `Administrador`, `Gestor`, `Recepção`,
   `Profissional de saúde`, `Financeiro`. Existem nos 3 planos. Perfil é papel de permissão, **não** conta.
   O plano corta o módulo mesmo que o perfil tenha a permissão marcada.
-- **Plano = variável de ambiente.** `PLANO=essencial|profissional|ilimitado` no deploy da API. O
-  primeiro acesso **não** pergunta o plano. Quem define é quem configura o servidor.
+- **Plano por clínica.** `PLANO=essencial|profissional|ilimitado` só define o plano da primeira clínica
+  criada pelo setup. Trocar a variável e reiniciar a API não altera clínicas que já existem. Para mudar
+  o plano de um cliente, use o SQL do Apêndice B em `PLANEJAMENTO-MULTI-TENANT.md` (modo sistema +
+  `UPDATE` em `clinicas.planoId`).
+- **Isolamento multi-tenant.** O banco é compartilhado. Cada linha de negócio tem `clinicaId` (ou é filha
+  de uma tabela que tem) e uma política RLS `tenant_isolamento`. A API grava `app.clinica_id` na sessão
+  do Postgres a partir do JWT. Tabela nova de negócio precisa nascer com `clinicaId` e com a política do
+  modelo na seção 5.5 do planejamento. `planos` e `_prisma_migrations` ficam sem RLS. Script manual que
+  precise ver o banco inteiro deve abrir a transação com `SET LOCAL app.modo_sistema = 'on'`.
 - **Setup no painel = banco vazio.** `GET /setup/status` diz se ainda não existe clínica. `POST /setup`
   cria clínica, 1 unidade, os 5 perfis e 1 usuário **Administrador** ativo, e devolve a sessão. Depois
   disso o endpoint responde 409.

@@ -29,11 +29,14 @@ export function planoResumo(plano: Plano) {
   };
 }
 
-export function perfilResumo(perfil: { id: string; nome: string; permissoes: unknown }) {
+export function perfilResumo(
+  perfil: { id: string; nome: string; permissoes: unknown },
+  codigoPlano: string,
+) {
   return {
     id: perfil.id,
     nome: perfil.nome,
-    permissoes: permissoesEfetivas(perfil),
+    permissoes: permissoesEfetivas(perfil, codigoPlano),
   };
 }
 
@@ -69,7 +72,8 @@ export function montarSessao(params: {
     unidades,
     unidadeAtualId,
     clinicaNome: usuario.clinica.nomeFantasia,
-    perfil: perfilResumo(usuario.perfil),
+    clinicaId: usuario.clinicaId,
+    perfil: perfilResumo(usuario.perfil, usuario.clinica.plano.codigo),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
   };
@@ -88,7 +92,8 @@ export function montarMe(params: {
     unidades,
     unidadeAtualId,
     clinicaNome: usuario.clinica.nomeFantasia,
-    perfil: perfilResumo(usuario.perfil),
+    clinicaId: usuario.clinicaId,
+    perfil: perfilResumo(usuario.perfil, usuario.clinica.plano.codigo),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
   };

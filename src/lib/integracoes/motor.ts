@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { comTenant, comoSistema } from '../tenant';
 import { dataCivil } from '../datas';
 import { TipoLembrete } from './constantes';
 import { formatarDataPt, interpolarTexto, parametrosWhatsapp } from './placeholders';
@@ -206,11 +207,13 @@ export async function dispararEventoAgenda(params: {
   }
 }
 
-export async function varrerAntecedencias(): Promise<void> {
-  const clinicas = await prisma.integracaoClinica.findMany({
-    where: { lembretesAtivos: true },
-    select: { clinicaId: true },
-  });
+export async function varrerAntecedencias(clinicaId?: string): Promise<void> {
+  const clinicas = await comoSistema(() =>
+    prisma.integracaoClinica.findMany({
+      where: { lembretesAtivos: true, ...(clinicaId ? { clinicaId } : {}) },
+      select: { clinicaId: true },
+    }),
+  );
   if (clinicas.length === 0) return;
 
   const agora = new Date();
@@ -218,18 +221,20 @@ export async function varrerAntecedencias(): Promise<void> {
   const inicioHoje = new Date(`${dataCivil(agora)}T00:00:00.000Z`);
 
   for (const clinica of clinicas) {
-    const agendamentos = await prisma.agendamento.findMany({
-      where: {
-        clinicaId: clinica.clinicaId,
-        data: { gte: inicioHoje, lte: limite },
-        status: { in: ['agendado', 'confirmado', 'check_in', 'em_atendimento'] },
-      },
-      select: { id: true, data: true, horaInicio: true },
-    });
+    await comTenant(clinica.clinicaId, async () => {
+      const agendamentos = await prisma.agendamento.findMany({
+        where: {
+          clinicaId: clinica.clinicaId,
+          data: { gte: inicioHoje, lte: limite },
+          status: { in: ['agendado', 'confirmado', 'check_in', 'em_atendimento'] },
+        },
+        select: { id: true, data: true, horaInicio: true },
+      });
 
-    for (const item of agendamentos) {
-      if (instanteAgendamento(item.data, item.horaInicio).getTime() <= agora.getTime()) continue;
-      await sincronizarAntecedencia(item.id, clinica.clinicaId);
-    }
+      for (const item of agendamentos) {
+        if (instanteAgendamento(item.data, item.horaInicio).getTime() <= agora.getTime()) continue;
+        await sincronizarAntecedencia(item.id, clinica.clinicaId);
+      }
+    });
   }
 }

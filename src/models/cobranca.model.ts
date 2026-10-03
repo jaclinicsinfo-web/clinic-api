@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
+import { transacao } from '../lib/tenant';
 import { dataCivil, dataDeIso, hojeCivil } from '../lib/datas';
 import { adicionarMesesIso, arredondarDinheiro } from '../lib/financeiro';
 
@@ -68,12 +69,13 @@ export async function criar(dados: DadosCobranca): Promise<CobrancaCompleta> {
 
 export async function registrarPagamento(params: {
   id: string;
+  clinicaId: string;
   formaPagamento: string;
   pagoEm: Date;
   observacoes?: string | null;
 }): Promise<CobrancaCompleta> {
   return prisma.cobranca.update({
-    where: { id: params.id },
+    where: { id: params.id, clinicaId: params.clinicaId },
     data: {
       status: 'pago',
       formaPagamento: params.formaPagamento,
@@ -84,9 +86,9 @@ export async function registrarPagamento(params: {
   });
 }
 
-export async function cancelar(id: string): Promise<CobrancaCompleta> {
+export async function cancelar(id: string, clinicaId: string): Promise<CobrancaCompleta> {
   return prisma.cobranca.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status: 'cancelado' },
     include: incluir,
   });
@@ -94,6 +96,7 @@ export async function cancelar(id: string): Promise<CobrancaCompleta> {
 
 export async function parcelar(params: {
   id: string;
+  clinicaId: string;
   quantidade: number;
   vencimentoBase: string;
   valorTotal: number;
@@ -111,35 +114,51 @@ export async function parcelar(params: {
     };
   });
 
-  await prisma.$transaction([
-    prisma.parcelaCobranca.deleteMany({ where: { cobrancaId: params.id } }),
-    prisma.parcelaCobranca.createMany({
-      data: parcelas.map((parcela) => ({ cobrancaId: params.id, ...parcela })),
-    }),
-    prisma.cobranca.update({
-      where: { id: params.id },
-      data: { status: 'parcelado', formaPagamento: params.formaPagamento ?? undefined },
-    }),
-  ]);
+  await transacao(async (tx) => {
+    const cobranca = await tx.cobranca.findFirst({
+      where: { id: params.id, clinicaId: params.clinicaId },
+      select: { id: true },
+    });
+    if (!cobranca) throw new Error('Cobrança não encontrada após parcelar.');
 
-  const atualizada = await prisma.cobranca.findUnique({ where: { id: params.id }, include: incluir });
+    await tx.parcelaCobranca.deleteMany({ where: { cobrancaId: cobranca.id } });
+    await tx.parcelaCobranca.createMany({
+      data: parcelas.map((parcela) => ({ cobrancaId: cobranca.id, ...parcela })),
+    });
+    await tx.cobranca.update({
+      where: { id: cobranca.id, clinicaId: params.clinicaId },
+      data: { status: 'parcelado', formaPagamento: params.formaPagamento ?? undefined },
+    });
+  });
+
+  const atualizada = await prisma.cobranca.findFirst({
+    where: { id: params.id, clinicaId: params.clinicaId },
+    include: incluir,
+  });
   if (!atualizada) throw new Error('Cobrança não encontrada após parcelar.');
   return atualizada;
 }
 
 export async function pagarParcela(params: {
   cobrancaId: string;
+  clinicaId: string;
   numero: number;
   formaPagamento: string;
   pagoEm: Date;
 }): Promise<CobrancaCompleta> {
+  const existente = await prisma.cobranca.findFirst({
+    where: { id: params.cobrancaId, clinicaId: params.clinicaId },
+    select: { id: true },
+  });
+  if (!existente) throw new Error('Cobrança não encontrada após pagar parcela.');
+
   await prisma.parcelaCobranca.updateMany({
-    where: { cobrancaId: params.cobrancaId, numero: params.numero },
+    where: { cobrancaId: existente.id, numero: params.numero },
     data: { status: 'pago', pagoEm: params.pagoEm, formaPagamento: params.formaPagamento },
   });
 
-  const cobranca = await prisma.cobranca.findUnique({
-    where: { id: params.cobrancaId },
+  const cobranca = await prisma.cobranca.findFirst({
+    where: { id: params.cobrancaId, clinicaId: params.clinicaId },
     include: incluir,
   });
   if (!cobranca) throw new Error('Cobrança não encontrada após pagar parcela.');
@@ -147,7 +166,7 @@ export async function pagarParcela(params: {
   const todasPagas = cobranca.parcelas.every((parcela) => parcela.status === 'pago');
   if (todasPagas) {
     return prisma.cobranca.update({
-      where: { id: params.cobrancaId },
+      where: { id: params.cobrancaId, clinicaId: params.clinicaId },
       data: { status: 'pago', formaPagamento: params.formaPagamento, pagoEm: params.pagoEm },
       include: incluir,
     });
@@ -156,10 +175,10 @@ export async function pagarParcela(params: {
   return cobranca;
 }
 
-export async function marcarPagas(ids: string[], formaPagamento: string, pagoEm: Date) {
+export async function marcarPagas(ids: string[], clinicaId: string, formaPagamento: string, pagoEm: Date) {
   if (ids.length === 0) return;
   await prisma.cobranca.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, clinicaId },
     data: { status: 'pago', formaPagamento, pagoEm },
   });
 }
@@ -279,10 +298,10 @@ export async function movimentosRecebidos(clinicaId: string, inicio: Date, fim: 
   ];
 }
 
-export async function idsEmLote(cobrancaIds: string[]): Promise<Set<string>> {
+export async function idsEmLote(cobrancaIds: string[], clinicaId: string): Promise<Set<string>> {
   if (cobrancaIds.length === 0) return new Set();
   const guias = await prisma.loteGuia.findMany({
-    where: { cobrancaId: { in: cobrancaIds } },
+    where: { cobrancaId: { in: cobrancaIds }, cobranca: { clinicaId } },
     select: { cobrancaId: true },
   });
   return new Set(guias.map((item) => item.cobrancaId));

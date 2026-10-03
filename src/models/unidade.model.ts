@@ -1,7 +1,5 @@
-import { Prisma, Unidade, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
+import { Prisma, Unidade } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../config/database';
 
 export async function criarUnidade(
   dados: { clinicaId: string; nome: string; cidade: string },
@@ -19,17 +17,18 @@ export async function criarUnidade(
 
 export async function atualizarUnidade(
   id: string,
+  clinicaId: string,
   dados: { nome: string; cidade: string },
 ): Promise<Unidade> {
   return prisma.unidade.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { nome: dados.nome, cidade: dados.cidade },
   });
 }
 
-export async function alterarAtivo(id: string, ativo: boolean): Promise<Unidade> {
+export async function alterarAtivo(id: string, clinicaId: string, ativo: boolean): Promise<Unidade> {
   return prisma.unidade.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { ativo },
   });
 }

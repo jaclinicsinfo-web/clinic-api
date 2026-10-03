@@ -79,10 +79,11 @@ export async function criar(dados: DadosProcedimento): Promise<ProcedimentoCompl
 
 export async function atualizar(
   id: string,
+  clinicaId: string,
   dados: Omit<DadosProcedimento, 'clinicaId'>,
 ): Promise<ProcedimentoCompleto> {
   return prisma.procedimento.update({
-    where: { id },
+    where: { id, clinicaId },
     data: {
       nome: dados.nome,
       categoria: dados.categoria,
@@ -94,9 +95,13 @@ export async function atualizar(
   });
 }
 
-export async function alterarStatus(id: string, status: string): Promise<ProcedimentoCompleto> {
+export async function alterarStatus(
+  id: string,
+  clinicaId: string,
+  status: string,
+): Promise<ProcedimentoCompleto> {
   return prisma.procedimento.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status },
     include: incluir,
   });

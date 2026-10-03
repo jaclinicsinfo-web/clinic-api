@@ -104,6 +104,7 @@ export async function sincronizarOperacionais(params: {
   if (chavesObsoletas.length > 0) {
     await prisma.notificacao.deleteMany({
       where: {
+        clinicaId: params.clinicaId,
         usuarioId: params.usuarioId,
         chave: { in: [...chavesObsoletas] },
       },
@@ -112,7 +113,10 @@ export async function sincronizarOperacionais(params: {
 
   for (const alerta of desejadas) {
     const existente = await prisma.notificacao.findUnique({
-      where: { usuarioId_chave: { usuarioId: params.usuarioId, chave: alerta.chave } },
+      where: {
+        usuarioId_chave: { usuarioId: params.usuarioId, chave: alerta.chave },
+        clinicaId: params.clinicaId,
+      },
     });
 
     if (!existente) {
@@ -133,7 +137,7 @@ export async function sincronizarOperacionais(params: {
 
     if (!existente.lidaEm) {
       await prisma.notificacao.update({
-        where: { id: existente.id },
+        where: { id: existente.id, clinicaId: params.clinicaId },
         data: {
           titulo: alerta.titulo,
           descricao: alerta.descricao,
@@ -145,27 +149,27 @@ export async function sincronizarOperacionais(params: {
   }
 }
 
-export async function listarDoUsuario(usuarioId: string) {
+export async function listarDoUsuario(usuarioId: string, clinicaId: string) {
   return prisma.notificacao.findMany({
-    where: { usuarioId },
+    where: { usuarioId, clinicaId },
     orderBy: [{ lidaEm: 'asc' }, { criadoEm: 'desc' }],
     take: 30,
   });
 }
 
-export async function marcarLida(id: string, usuarioId: string) {
-  const atual = await prisma.notificacao.findFirst({ where: { id, usuarioId } });
+export async function marcarLida(id: string, usuarioId: string, clinicaId: string) {
+  const atual = await prisma.notificacao.findFirst({ where: { id, usuarioId, clinicaId } });
   if (!atual) return null;
   if (atual.lidaEm) return atual;
   return prisma.notificacao.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { lidaEm: new Date() },
   });
 }
 
-export async function marcarTodasLidas(usuarioId: string) {
+export async function marcarTodasLidas(usuarioId: string, clinicaId: string) {
   await prisma.notificacao.updateMany({
-    where: { usuarioId, lidaEm: null },
+    where: { usuarioId, clinicaId, lidaEm: null },
     data: { lidaEm: new Date() },
   });
 }

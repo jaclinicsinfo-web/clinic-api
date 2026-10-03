@@ -161,7 +161,7 @@ export async function atualizarUnidadeClinica(req: Request, res: Response, next:
       throw new AppError(409, 'Já existe uma unidade com este nome.');
     }
 
-    const atualizada = await atualizarUnidade(unidade.id, {
+    const atualizada = await atualizarUnidade(unidade.id, unidade.clinicaId, {
       nome: dados.nome,
       cidade: dados.cidade,
     });
@@ -184,7 +184,7 @@ export async function inativarUnidadeClinica(req: Request, res: Response, next: 
       throw new AppError(400, 'A clínica precisa ter ao menos uma unidade ativa.');
     }
 
-    const atualizada = await alterarAtivo(unidade.id, false);
+    const atualizada = await alterarAtivo(unidade.id, unidade.clinicaId, false);
     await responderUnidade(req, res, atualizada);
   } catch (err) {
     next(err);
@@ -200,7 +200,7 @@ export async function ativarUnidadeClinica(req: Request, res: Response, next: Ne
     }
 
     await assertPodeAdicionarUnidade(unidade.clinicaId);
-    const atualizada = await alterarAtivo(unidade.id, true);
+    const atualizada = await alterarAtivo(unidade.id, unidade.clinicaId, true);
     await responderUnidade(req, res, atualizada);
   } catch (err) {
     next(err);

@@ -354,7 +354,7 @@ export async function obterEnvio(req: Request, res: Response, next: NextFunction
 
 export async function processarIntegracoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const processados = await processarFilaEnvios();
+    const processados = await processarFilaEnvios(req.auth!.clinicaId);
     res.json({ ok: true, processados });
   } catch (err) {
     next(err);
@@ -369,6 +369,12 @@ async function validarTemplatesRegra(
     const template = await buscarTemplate(dados.templateWhatsappId, clinicaId);
     if (!template || template.canal !== 'whatsapp') {
       throw new AppError(400, 'Template de WhatsApp inválido.');
+    }
+  }
+  if (dados.canais.includes('email') && dados.templateEmailId) {
+    const template = await buscarTemplate(dados.templateEmailId, clinicaId);
+    if (!template || template.canal !== 'email') {
+      throw new AppError(400, 'Template de e-mail inválido.');
     }
   }
 }

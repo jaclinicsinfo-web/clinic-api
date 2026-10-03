@@ -1,5 +1,6 @@
-import { Prisma, Clinica, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
+import { Prisma, Clinica } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../config/database';
+import { transacao } from '../lib/tenant';
 import { criarUnidade } from './unidade.model';
 import { criarPerfisPadrao } from './perfil-acesso.model';
 import { criarUsuario, buscarPorId as buscarUsuarioPorId, UsuarioCompleto } from './usuario.model';
@@ -44,8 +45,6 @@ export interface DadosAtualizacaoClinica {
   cidade: string;
   uf: string;
 }
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
 
 export async function criarClinica(
   dados: {
@@ -157,7 +156,7 @@ export async function criarCadastroPosCompra(
   dados: DadosCadastro,
   opcoes: { somenteSistemaVazio?: boolean } = {},
 ): Promise<ResultadoCadastro> {
-  const { clinicaId, usuarioId } = await prisma.$transaction(async (tx) => {
+  const { clinicaId, usuarioId } = await transacao(async (tx) => {
     if (opcoes.somenteSistemaVazio) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_SETUP_INICIAL})`;
       const existentes = await tx.clinica.count();

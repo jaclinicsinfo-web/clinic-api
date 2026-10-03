@@ -138,10 +138,11 @@ export async function criar(dados: DadosAgendamento): Promise<AgendamentoComplet
 
 export async function atualizar(
   id: string,
+  clinicaId: string,
   dados: Omit<DadosAgendamento, 'clinicaId' | 'unidadeId' | 'criadoPorId'>,
 ): Promise<AgendamentoCompleto> {
   return prisma.agendamento.update({
-    where: { id },
+    where: { id, clinicaId },
     data: {
       pacienteId: dados.pacienteId,
       profissionalId: dados.profissionalId,
@@ -161,9 +162,13 @@ export async function atualizar(
   });
 }
 
-export async function alterarStatus(id: string, status: string): Promise<AgendamentoCompleto> {
+export async function alterarStatus(
+  id: string,
+  clinicaId: string,
+  status: string,
+): Promise<AgendamentoCompleto> {
   return prisma.agendamento.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status },
     include: incluir,
   });
@@ -171,18 +176,23 @@ export async function alterarStatus(id: string, status: string): Promise<Agendam
 
 export async function reagendar(
   id: string,
+  clinicaId: string,
   dados: { data: Date; horaInicio: string; horaFim: string; profissionalId: string },
 ): Promise<AgendamentoCompleto> {
   return prisma.agendamento.update({
-    where: { id },
+    where: { id, clinicaId },
     data: dados,
     include: incluir,
   });
 }
 
-export async function marcarLembrete(id: string, lembreteEnviado: boolean): Promise<AgendamentoCompleto> {
+export async function marcarLembrete(
+  id: string,
+  clinicaId: string,
+  lembreteEnviado: boolean,
+): Promise<AgendamentoCompleto> {
   return prisma.agendamento.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { lembreteEnviado },
     include: incluir,
   });
@@ -299,8 +309,8 @@ export async function buscarBloqueio(id: string, clinicaId: string) {
   return prisma.bloqueioAgenda.findFirst({ where: { id, clinicaId } });
 }
 
-export async function removerBloqueio(id: string) {
-  await prisma.bloqueioAgenda.delete({ where: { id } });
+export async function removerBloqueio(id: string, clinicaId: string) {
+  await prisma.bloqueioAgenda.delete({ where: { id, clinicaId } });
 }
 
 const incluirEspera = {
@@ -343,14 +353,14 @@ export async function buscarEspera(id: string, clinicaId: string): Promise<Lista
   });
 }
 
-export async function marcarEsperaEncaixada(id: string): Promise<ListaEsperaCompleta> {
+export async function marcarEsperaEncaixada(id: string, clinicaId: string): Promise<ListaEsperaCompleta> {
   return prisma.listaEsperaItem.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status: 'encaixado' },
     include: incluirEspera,
   });
 }
 
-export async function removerEspera(id: string) {
-  await prisma.listaEsperaItem.delete({ where: { id } });
+export async function removerEspera(id: string, clinicaId: string) {
+  await prisma.listaEsperaItem.delete({ where: { id, clinicaId } });
 }

@@ -15,7 +15,7 @@ import {
   ehProfissionalAtivoDaClinica,
   listarAtivosPorClinica as listarProfissionaisAtivos,
 } from '../models/profissional.model';
-import { datasPorPacientes, listarDoPaciente } from '../models/agendamento.model';
+import { buscarPorIdEClinica as buscarAgendamento, datasPorPacientes, listarDoPaciente } from '../models/agendamento.model';
 import { listarPorClinica as listarCobrancas, saldosPorPaciente } from '../models/cobranca.model';
 import { cobrancaResumo } from '../views/financeiro.view';
 import {
@@ -35,6 +35,7 @@ import {
 } from '../models/documento-paciente.model';
 import { listarAtivosPorClinica as listarProcedimentosAtivos } from '../models/procedimento.model';
 import { possuiAcessoUnidade } from '../models/usuario.model';
+import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
 import {
   carregarContextoClinico,
   carregarUsuario,
@@ -288,7 +289,8 @@ export async function criarPaciente(
     }
 
     const temAcesso = await possuiAcessoUnidade(req.auth!.sub, unidadeId);
-    if (!temAcesso) {
+    const unidade = await buscarUnidadePorId(unidadeId);
+    if (!temAcesso || !unidade || unidade.clinicaId !== clinicaId) {
       throw new AppError(403, 'Você não tem acesso a esta unidade.');
     }
 
@@ -331,6 +333,7 @@ export async function atualizarPaciente(
 
     const atualizado = await atualizar(
       paciente.id,
+      paciente.clinicaId,
       paraDados(paciente.clinicaId, paciente.unidadeId, dados, profissionalPreferidoId),
     );
     res.json(montarPaciente(atualizado));
@@ -350,7 +353,7 @@ export async function arquivarPaciente(
       res.json(montarPaciente(paciente));
       return;
     }
-    const atualizado = await alterarStatus(paciente.id, 'arquivado');
+    const atualizado = await alterarStatus(paciente.id, paciente.clinicaId, 'arquivado');
     res.json(montarPaciente(atualizado));
   } catch (err) {
     next(err);
@@ -369,6 +372,12 @@ export async function registrarEvolucao(
     }
 
     const dados = atendimentoBodySchema.parse(req.body);
+    if (dados.agendamentoId) {
+      const agendamento = await buscarAgendamento(dados.agendamentoId, paciente.clinicaId);
+      if (!agendamento || agendamento.pacienteId !== paciente.id) {
+        throw new AppError(400, 'Agendamento inválido para este paciente.');
+      }
+    }
     const profissionalId = somenteProprios && profissionalIdEscopo ? profissionalIdEscopo : dados.profissionalId;
 
     if (!(await ehProfissionalAtivoDaClinica(profissionalId, paciente.clinicaId))) {
@@ -420,7 +429,7 @@ export async function registrarEvolucao(
     });
 
     if (dados.tipoRegistro === 'alta' && acompanhamentoId) {
-      await encerrarAcompanhamento(acompanhamentoId, {
+      await encerrarAcompanhamento(acompanhamentoId, paciente.clinicaId, {
         altaEm: dataDeIso(hojeCivil()) as Date,
         resumoAlta: dados.quadroClinico ?? '',
       });
@@ -534,7 +543,7 @@ export async function excluirDocumento(
     if (!documento) {
       throw new AppError(404, 'Documento não encontrado.');
     }
-    await removerDocumento(documento.id);
+    await removerDocumento(documento.id, paciente.clinicaId);
     res.status(204).send();
   } catch (err) {
     next(err);

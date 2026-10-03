@@ -1,4 +1,3 @@
-import { env } from '../config/env';
 import { AcoesModulo, MODULOS, NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_GESTOR, Permissoes, todasTrue } from './perfis-padrao';
 import { mensagemModuloForaDoPlano, planoIncluiModulo } from './modulos-plano';
 
@@ -82,18 +81,24 @@ export function montarPermissoesDoPerfil(perfil: { nome: string; permissoes: unk
   });
 }
 
-export function permissoesEfetivas(perfil: { nome: string; permissoes: unknown }): PermissaoItem[] {
-  return restringirPermissoesAoPlano(montarPermissoesDoPerfil(perfil), env.PLANO);
+export function permissoesEfetivas(
+  perfil: { nome: string; permissoes: unknown },
+  codigoPlano: string,
+): PermissaoItem[] {
+  return restringirPermissoesAoPlano(montarPermissoesDoPerfil(perfil), codigoPlano);
 }
 
 export function temAcessoAoModulo(
   usuario: {
     perfil: { nome: string; permissoes: unknown };
+    clinica: { plano: { codigo: string } };
   },
   modulo: string,
   acao: AcaoPermissao = 'visualizar',
 ): boolean {
-  return Boolean(permissoesEfetivas(usuario.perfil).find((item) => item.modulo === modulo)?.[acao]);
+  return Boolean(
+    permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo).find((item) => item.modulo === modulo)?.[acao],
+  );
 }
 
 export { mensagemModuloForaDoPlano, planoIncluiModulo };

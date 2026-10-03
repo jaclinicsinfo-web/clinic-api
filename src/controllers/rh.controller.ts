@@ -252,7 +252,7 @@ export async function baterPonto(req: Request, res: Response, next: NextFunction
     garantirHorarios(horarios);
 
     const salvo = atual
-      ? await atualizarRegistroPonto(atual.id, {
+      ? await atualizarRegistroPonto(atual.id, auth.clinicaId, {
           ...horarios,
           observacao: atual.observacao,
           origem: 'proprio',
@@ -283,7 +283,7 @@ export async function atualizarPonto(req: Request, res: Response, next: NextFunc
     const horarios = horariosDe(dados);
     garantirHorarios(horarios);
 
-    const atualizado = await atualizarRegistroPonto(registro.id, {
+    const atualizado = await atualizarRegistroPonto(registro.id, registro.clinicaId, {
       ...horarios,
       observacao: dados.observacao ?? null,
       registradoPorId: req.auth!.sub,
@@ -300,7 +300,7 @@ export async function excluirPonto(req: Request, res: Response, next: NextFuncti
     const { gestaoCompleta } = await contextoRh(req);
     exigirGestaoRh(gestaoCompleta);
     const registro = await carregarRegistro(req);
-    await removerRegistroPonto(registro.id);
+    await removerRegistroPonto(registro.id, registro.clinicaId);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -405,7 +405,7 @@ export async function excluirHoleriteRh(req: Request, res: Response, next: NextF
     if (!holerite) {
       throw new AppError(404, 'Holerite não encontrado.');
     }
-    await removerHolerite(holerite.id);
+    await removerHolerite(holerite.id, holerite.clinicaId);
     res.status(204).send();
   } catch (err) {
     next(err);

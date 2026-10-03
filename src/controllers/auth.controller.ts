@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import {
   loginSchema,
+  primeiroAcessoSchema,
   recuperarSenhaSchema,
   redefinirSenhaSchema,
   selecionarUnidadeSchema,
   temaSchema,
 } from '../validators/auth.validator';
 import {
+  atualizarNome,
   buscarPorEmail,
   buscarPorId,
   registrarAcesso,
@@ -14,13 +16,21 @@ import {
   atualizarTema,
 } from '../models/usuario.model';
 import { criarRecuperacao, redefinirComToken } from '../models/recuperacao-senha.model';
-import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
-import { usoDaClinica, sincronizarPlanoDoDeploy } from '../models/plano.model';
+import {
+  atualizarUnidade,
+  buscarPorId as buscarUnidadePorId,
+  concederAcesso,
+  criarUnidade,
+  nomeJaExiste,
+} from '../models/unidade.model';
+import { assertPodeAdicionarUnidade, usoDaClinica } from '../models/plano.model';
+import { NOME_PERFIL_ADMINISTRADOR } from '../lib/perfis-padrao';
 import { assinarToken } from '../lib/jwt';
 import { conferirSenha } from '../lib/password';
 import { enviarEmail, montarEmailRedefinirSenha } from '../lib/email';
 import { env, isDev } from '../config/env';
 import { AppError } from '../lib/erros';
+import { comTenant, comoSistema } from '../lib/tenant';
 import {
   montarSessao,
   montarMe,
@@ -36,7 +46,7 @@ export async function login(
   try {
     const { email, senha, lembrar } = loginSchema.parse(req.body);
 
-    const usuario = await buscarPorEmail(email);
+    const usuario = await comoSistema(() => buscarPorEmail(email));
     if (!usuario) {
       throw new AppError(401, 'E-mail ou senha incorretos.');
     }
@@ -53,8 +63,11 @@ export async function login(
       );
     }
 
+    const primeiroAcesso =
+      usuario.ultimoAcesso == null && usuario.perfil.nome === NOME_PERFIL_ADMINISTRADOR;
+
     const unidadesAtivas = usuario.usuarioUnidades.filter((item) => item.unidade.ativo);
-    if (unidadesAtivas.length === 0) {
+    if (unidadesAtivas.length === 0 && !primeiroAcesso) {
       throw new AppError(
         403,
         'Nenhuma unidade liberada para este usuário. Fale com o administrador.',
@@ -75,18 +88,94 @@ export async function login(
       lembrar,
     );
 
-    await registrarAcesso(usuario.id);
-    usuario.ultimoAcesso = new Date();
+    await comTenant(usuario.clinicaId, async () => {
+      if (!primeiroAcesso) {
+        await registrarAcesso(usuario.id, usuario.clinicaId);
+      }
 
-    await sincronizarPlanoDoDeploy(usuario.clinicaId);
+      const atualizado = await buscarPorId(usuario.id);
+      if (!atualizado) {
+        throw new AppError(401, 'Sessão expirada. Entre novamente.');
+      }
+
+      const uso = await usoDaClinica(atualizado.clinicaId);
+
+      res.json({
+        ...montarSessao({ token, usuario: atualizado, unidadeAtualId, uso }),
+        primeiroAcesso,
+      });
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function concluirPrimeiroAcesso(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const auth = req.auth!;
+    const dados = primeiroAcessoSchema.parse(req.body);
+    const usuario = await buscarPorId(auth.sub);
+
+    if (!usuario || usuario.clinicaId !== auth.clinicaId) {
+      throw new AppError(401, 'Sessão expirada. Entre novamente.');
+    }
+    if (usuario.perfil.nome !== NOME_PERFIL_ADMINISTRADOR || usuario.ultimoAcesso) {
+      throw new AppError(400, 'O primeiro acesso já foi concluído.');
+    }
+
+    await atualizarNome(usuario.id, usuario.clinicaId, dados.adminNome);
+
+    const unidadeAtiva = usuario.usuarioUnidades.find((item) => item.unidade.ativo);
+    let unidadeId = unidadeAtiva?.unidadeId ?? null;
+
+    if (unidadeId) {
+      if (await nomeJaExiste(usuario.clinicaId, dados.unidadeNome, unidadeId)) {
+        throw new AppError(409, 'Já existe uma unidade com este nome.');
+      }
+      await atualizarUnidade(unidadeId, usuario.clinicaId, {
+        nome: dados.unidadeNome,
+        cidade: dados.unidadeCidade,
+      });
+    } else {
+      if (await nomeJaExiste(usuario.clinicaId, dados.unidadeNome)) {
+        throw new AppError(409, 'Já existe uma unidade com este nome.');
+      }
+      await assertPodeAdicionarUnidade(usuario.clinicaId);
+      const criada = await criarUnidade({
+        clinicaId: usuario.clinicaId,
+        nome: dados.unidadeNome,
+        cidade: dados.unidadeCidade,
+      });
+      await concederAcesso(criada.id, [usuario.id]);
+      unidadeId = criada.id;
+    }
+
+    await registrarAcesso(usuario.id, usuario.clinicaId);
     const atualizado = await buscarPorId(usuario.id);
     if (!atualizado) {
       throw new AppError(401, 'Sessão expirada. Entre novamente.');
     }
 
+    const token = assinarToken(
+      {
+        sub: atualizado.id,
+        email: atualizado.email,
+        perfilId: atualizado.perfilId,
+        clinicaId: atualizado.clinicaId,
+        unidadeAtualId: unidadeId,
+      },
+      true,
+    );
     const uso = await usoDaClinica(atualizado.clinicaId);
 
-    res.json(montarSessao({ token, usuario: atualizado, unidadeAtualId, uso }));
+    res.json({
+      ...montarSessao({ token, usuario: atualizado, unidadeAtualId: unidadeId, uso }),
+      primeiroAcesso: false,
+    });
   } catch (err) {
     next(err);
   }
@@ -107,7 +196,7 @@ export async function selecionarUnidade(
     }
 
     const unidade = await buscarUnidadePorId(unidadeId);
-    if (!unidade || !unidade.ativo) {
+    if (!unidade || !unidade.ativo || unidade.clinicaId !== auth.clinicaId) {
       throw new AppError(403, 'Você não tem acesso a esta unidade.');
     }
 
@@ -137,16 +226,10 @@ export async function me(
       throw new AppError(401, 'Sessão expirada. Entre novamente.');
     }
 
-    await sincronizarPlanoDoDeploy(usuario.clinicaId);
-    const atualizado = await buscarPorId(auth.sub);
-    if (!atualizado) {
-      throw new AppError(401, 'Sessão expirada. Entre novamente.');
-    }
-
-    const uso = await usoDaClinica(atualizado.clinicaId);
+    const uso = await usoDaClinica(usuario.clinicaId);
 
     res.json(
-      montarMe({ usuario: atualizado, unidadeAtualId: auth.unidadeAtualId, uso }),
+      montarMe({ usuario, unidadeAtualId: auth.unidadeAtualId, uso }),
     );
   } catch (err) {
     next(err);
@@ -165,7 +248,7 @@ export async function atualizarTemaPreferido(
   try {
     const auth = req.auth!;
     const { tema } = temaSchema.parse(req.body);
-    const usuario = await atualizarTema(auth.sub, tema);
+    const usuario = await atualizarTema(auth.sub, auth.clinicaId, tema);
     res.json({ tema: usuario.tema === 'escuro' ? 'escuro' : 'claro' });
   } catch (err) {
     next(err);
@@ -182,10 +265,10 @@ export async function solicitarRecuperacao(
 ): Promise<void> {
   try {
     const { email } = recuperarSenhaSchema.parse(req.body);
-    const usuario = await buscarPorEmail(email);
+    const usuario = await comoSistema(() => buscarPorEmail(email));
 
     if (usuario && usuario.status === 'ativo') {
-      const token = await criarRecuperacao(usuario.id);
+      const token = await comTenant(usuario.clinicaId, () => criarRecuperacao(usuario.id));
       const link = `${env.FRONTEND_URL.replace(/\/+$/, '')}/redefinir-senha?token=${token}`;
 
       const mensagem = montarEmailRedefinirSenha({

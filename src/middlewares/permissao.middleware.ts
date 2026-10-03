@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { buscarPorId } from '../models/usuario.model';
-import { env } from '../config/env';
 import { AcaoPermissao, mensagemModuloForaDoPlano, planoIncluiModulo, temAcessoAoModulo } from '../lib/permissoes';
 import { AppError } from '../lib/erros';
 
@@ -17,7 +16,7 @@ export function exigirPermissao(modulo: string, acao: AcaoPermissao = 'visualiza
         throw new AppError(401, 'Sessão expirada. Entre novamente.');
       }
 
-      if (!planoIncluiModulo(env.PLANO, modulo)) {
+      if (!planoIncluiModulo(usuario.clinica.plano.codigo, modulo)) {
         throw new AppError(403, mensagemModuloForaDoPlano(modulo));
       }
 

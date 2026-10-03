@@ -401,6 +401,7 @@ export async function criarCobranca(req: Request, res: Response, next: NextFunct
     if (dados.parcelas && dados.parcelas >= 2) {
       cobranca = await cobrancaModel.parcelar({
         id: cobranca.id,
+        clinicaId: cobranca.clinicaId,
         quantidade: dados.parcelas,
         vencimentoBase: dados.vencimento,
         valorTotal: valor,
@@ -431,6 +432,7 @@ export async function pagarCobranca(req: Request, res: Response, next: NextFunct
       if (!proxima) throw new AppError(400, 'Todas as parcelas já foram pagas.');
       const atualizada = await cobrancaModel.pagarParcela({
         cobrancaId: cobranca.id,
+        clinicaId: cobranca.clinicaId,
         numero: proxima.numero,
         formaPagamento: dados.formaPagamento,
         pagoEm,
@@ -442,6 +444,7 @@ export async function pagarCobranca(req: Request, res: Response, next: NextFunct
     void status;
     const atualizada = await cobrancaModel.registrarPagamento({
       id: cobranca.id,
+      clinicaId: cobranca.clinicaId,
       formaPagamento: dados.formaPagamento,
       pagoEm,
       observacoes: dados.observacoes ?? cobranca.observacoes,
@@ -463,6 +466,7 @@ export async function pagarParcelaCobranca(req: Request, res: Response, next: Ne
 
     const atualizada = await cobrancaModel.pagarParcela({
       cobrancaId: cobranca.id,
+      clinicaId: cobranca.clinicaId,
       numero,
       formaPagamento: dados.formaPagamento,
       pagoEm: dataDeIso(dados.data) as Date,
@@ -482,6 +486,7 @@ export async function parcelarCobranca(req: Request, res: Response, next: NextFu
     }
     const atualizada = await cobrancaModel.parcelar({
       id: cobranca.id,
+      clinicaId: cobranca.clinicaId,
       quantidade: dados.quantidade,
       vencimentoBase: dataCivil(cobranca.vencimento) ?? hojeCivil(),
       valorTotal: dinheiro(cobranca.valor),
@@ -499,7 +504,7 @@ export async function cancelarCobranca(req: Request, res: Response, next: NextFu
     if (cobranca.status === 'pago') {
       throw new AppError(400, 'Não é possível cancelar uma cobrança já paga.');
     }
-    const atualizada = await cobrancaModel.cancelar(cobranca.id);
+    const atualizada = await cobrancaModel.cancelar(cobranca.id, cobranca.clinicaId);
     res.json(montarCobranca(atualizada));
   } catch (err) {
     next(err);
@@ -553,7 +558,7 @@ export async function atualizarDespesa(req: Request, res: Response, next: NextFu
       throw new AppError(400, 'Não é possível editar uma despesa já paga.');
     }
     const dados = despesaBodySchema.parse(req.body);
-    const atualizada = await despesaModel.atualizar(despesa.id, {
+    const atualizada = await despesaModel.atualizar(despesa.id, despesa.clinicaId, {
       descricao: dados.descricao,
       categoria: dados.categoria,
       fornecedor: dados.fornecedor,
@@ -578,6 +583,7 @@ export async function pagarDespesa(req: Request, res: Response, next: NextFuncti
     const dados = pagamentoBodySchema.parse(req.body);
     const atualizada = await despesaModel.registrarPagamento({
       id: despesa.id,
+      clinicaId: despesa.clinicaId,
       formaPagamento: dados.formaPagamento,
       pagoEm: dataDeIso(dados.data) as Date,
       observacoes: dados.observacoes ?? despesa.observacoes,
@@ -594,7 +600,7 @@ export async function removerDespesa(req: Request, res: Response, next: NextFunc
     if (despesa.status === 'pago') {
       throw new AppError(400, 'Não é possível excluir uma despesa já paga.');
     }
-    await despesaModel.remover(despesa.id);
+    await despesaModel.remover(despesa.id, despesa.clinicaId);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -665,7 +671,12 @@ export async function enviarLote(req: Request, res: Response, next: NextFunction
     }
     const enviadoEm = hojeCivil();
     const previsao = adicionarDiasIso(enviadoEm, lote.convenio.prazoPagamentoDias);
-    const atualizado = await loteModel.enviar(lote.id, dataDeIso(enviadoEm) as Date, dataDeIso(previsao) as Date);
+    const atualizado = await loteModel.enviar(
+      lote.id,
+      lote.clinicaId,
+      dataDeIso(enviadoEm) as Date,
+      dataDeIso(previsao) as Date,
+    );
     res.json(montarLote(atualizado));
   } catch (err) {
     next(err);
@@ -697,6 +708,7 @@ export async function reconciliarLote(req: Request, res: Response, next: NextFun
 
     const atualizado = await loteModel.reconciliar({
       id: lote.id,
+      clinicaId: lote.clinicaId,
       valorGlosado: dados.valorGlosado,
       valorRecebido: dados.valorRecebido,
       status,
@@ -705,6 +717,7 @@ export async function reconciliarLote(req: Request, res: Response, next: NextFun
     if (status === 'pago' || status === 'glosado') {
       await cobrancaModel.marcarPagas(
         lote.guias.map((guia) => guia.cobrancaId),
+        lote.clinicaId,
         'convenio',
         dataDeIso(hojeCivil()) as Date,
       );
@@ -787,7 +800,7 @@ export async function aprovarComissao(req: Request, res: Response, next: NextFun
     if (comissao.status !== 'prevista') {
       throw new AppError(400, 'Só é possível aprovar comissões previstas.');
     }
-    const atualizada = await comissaoModel.aprovar(comissao.id);
+    const atualizada = await comissaoModel.aprovar(comissao.id, comissao.clinicaId);
     res.json(montarComissao(atualizada));
   } catch (err) {
     next(err);
@@ -802,7 +815,7 @@ export async function pagarComissao(req: Request, res: Response, next: NextFunct
     }
     const dados = pagamentoBodySchema.parse(req.body);
     const pagoEm = dataDeIso(dados.data) as Date;
-    const atualizada = await comissaoModel.pagar(comissao.id, pagoEm);
+    const atualizada = await comissaoModel.pagar(comissao.id, comissao.clinicaId, pagoEm);
     await despesaModel.criar({
       clinicaId: req.auth!.clinicaId,
       unidadeId: exigirUnidade(req),

@@ -59,6 +59,6 @@ export async function buscarPorId(id: string, pacienteId: string, clinicaId: str
   });
 }
 
-export async function remover(id: string) {
-  await prisma.documentoPaciente.delete({ where: { id } });
+export async function remover(id: string, clinicaId: string) {
+  await prisma.documentoPaciente.delete({ where: { id, clinicaId } });
 }

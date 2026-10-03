@@ -14,6 +14,7 @@ import { dataCivil } from '../datas';
 import { formatarDataPt, interpolarTexto, parametrosWhatsapp } from './placeholders';
 import { normalizarTelefoneWhatsapp } from './regras';
 import { enviarTemplateWhatsapp } from './whatsapp-meta';
+import { comTenant, comoSistema } from '../tenant';
 
 let ocupado = false;
 
@@ -27,13 +28,13 @@ function credenciaisWhatsapp(config: NonNullable<Awaited<ReturnType<typeof obter
   };
 }
 
-async function processarUm(id: string): Promise<void> {
-  const envio = await reivindicarEnvio(id);
+async function processarUm(id: string, clinicaId: string): Promise<void> {
+  const envio = await reivindicarEnvio(id, clinicaId);
   if (!envio) return;
 
   const config = await obterConfiguracao(envio.clinicaId);
   if (!config?.lembretesAtivos) {
-    await atualizarEnvio(envio.id, {
+    await atualizarEnvio(envio.id, envio.clinicaId, {
       status: 'cancelado',
       erro: 'Lembretes desativados para a clínica.',
     });
@@ -42,12 +43,12 @@ async function processarUm(id: string): Promise<void> {
 
   const agendamento = await carregarAgendamentoMotor(envio.agendamentoId, envio.clinicaId);
   if (!agendamento) {
-    await atualizarEnvio(envio.id, { status: 'falhou', erro: 'Agendamento não encontrado.' });
+    await atualizarEnvio(envio.id, envio.clinicaId, { status: 'falhou', erro: 'Agendamento não encontrado.' });
     return;
   }
 
   if (envio.tipoLembrete === 'antecedencia' && ['cancelado', 'faltou', 'atendido'].includes(agendamento.status)) {
-    await atualizarEnvio(envio.id, {
+    await atualizarEnvio(envio.id, envio.clinicaId, {
       status: 'cancelado',
       erro: 'Agendamento não está mais elegível para lembrete de antecedência.',
     });
@@ -69,17 +70,17 @@ async function processarUm(id: string): Promise<void> {
 
   if (envio.canal === 'whatsapp') {
     if (!config.whatsappAtivo) {
-      await atualizarEnvio(envio.id, { status: 'falhou', erro: 'Integração WhatsApp desativada.' });
+      await atualizarEnvio(envio.id, envio.clinicaId, { status: 'falhou', erro: 'Integração WhatsApp desativada.' });
       return;
     }
     const credenciais = credenciaisWhatsapp(config);
     if (!credenciais) {
-      await atualizarEnvio(envio.id, { status: 'falhou', erro: 'Credenciais da Meta não configuradas.' });
+      await atualizarEnvio(envio.id, envio.clinicaId, { status: 'falhou', erro: 'Credenciais da Meta não configuradas.' });
       return;
     }
     const nomeTemplate = template?.whatsappNomeTemplate?.trim();
     if (!nomeTemplate) {
-      await atualizarEnvio(envio.id, {
+      await atualizarEnvio(envio.id, envio.clinicaId, {
         status: 'falhou',
         erro: 'Template aprovado da Meta não configurado.',
       });
@@ -91,7 +92,7 @@ async function processarUm(id: string): Promise<void> {
         ? normalizarTelefoneWhatsapp(agendamento.paciente.whatsapp || agendamento.paciente.telefone)
         : normalizarTelefoneWhatsapp(agendamento.profissional.telefone));
     if (!para) {
-      await atualizarEnvio(envio.id, {
+      await atualizarEnvio(envio.id, envio.clinicaId, {
         status: 'falhou',
         erro:
           envio.destinatarioTipo === 'paciente'
@@ -110,7 +111,7 @@ async function processarUm(id: string): Promise<void> {
 
     const categoria = template?.whatsappCategoria || 'utility';
     const custo = resultado.ok ? await custoDoEnvio(envio.clinicaId, 'whatsapp', categoria) : 0;
-    await atualizarEnvio(envio.id, {
+    await atualizarEnvio(envio.id, envio.clinicaId, {
       status: resultado.ok ? 'enviado' : 'falhou',
       provedorMessageId: resultado.provedorMessageId,
       erro: resultado.ok ? null : resultado.erro,
@@ -123,34 +124,36 @@ async function processarUm(id: string): Promise<void> {
         categoria,
       } as Prisma.InputJsonValue,
     });
-    if (resultado.ok) await marcarLembreteAgendamento(envio.agendamentoId);
+    if (resultado.ok) await marcarLembreteAgendamento(envio.agendamentoId, envio.clinicaId);
     return;
   }
 
-  await atualizarEnvio(envio.id, {
+  await atualizarEnvio(envio.id, envio.clinicaId, {
     status: 'cancelado',
     erro: 'Lembretes por e-mail não são enviados.',
   });
 }
 
-export async function processarFilaEnvios(): Promise<number> {
+export async function processarFilaEnvios(clinicaId?: string): Promise<number> {
   if (ocupado) return 0;
   ocupado = true;
   let processados = 0;
   try {
-    await varrerAntecedencias();
-    const pendentes = await listarPendentes(new Date(), 40);
+    await varrerAntecedencias(clinicaId);
+    const pendentes = await comoSistema(() => listarPendentes(new Date(), 40, clinicaId));
     for (const item of pendentes) {
-      try {
-        await processarUm(item.id);
-        processados += 1;
-      } catch (err) {
-        console.error('[integracoes] erro de processamento', err instanceof Error ? err.message : 'erro');
-        await atualizarEnvio(item.id, {
-          status: 'falhou',
-          erro: 'Erro interno ao processar o envio.',
-        }).catch(() => undefined);
-      }
+      await comTenant(item.clinicaId, async () => {
+        try {
+          await processarUm(item.id, item.clinicaId);
+          processados += 1;
+        } catch (err) {
+          console.error('[integracoes] erro de processamento', err instanceof Error ? err.message : 'erro');
+          await atualizarEnvio(item.id, item.clinicaId, {
+            status: 'falhou',
+            erro: 'Erro interno ao processar o envio.',
+          }).catch(() => undefined);
+        }
+      });
     }
   } catch (err) {
     console.error('[integracoes] falha no ciclo de processamento', err instanceof Error ? err.message : 'erro');

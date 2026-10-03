@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
+import { transacao } from '../lib/tenant';
 import { sincronizarCustosDaPlataforma } from './custo-envio.model';
 
 const CORPO_LEMBRETE =
@@ -21,8 +22,8 @@ export async function garantirPadrao(clinicaId: string) {
 
   const templates = await prisma.templateMensagem.count({ where: { clinicaId } });
   if (templates === 0) {
-    const criados = await prisma.$transaction([
-      prisma.templateMensagem.create({
+    const criados = await transacao(async (tx) => {
+      const lembrete = await tx.templateMensagem.create({
         data: {
           clinicaId,
           canal: 'whatsapp',
@@ -33,8 +34,8 @@ export async function garantirPadrao(clinicaId: string) {
           whatsappCategoria: 'utility',
           sistema: true,
         },
-      }),
-      prisma.templateMensagem.create({
+      });
+      const confirmacao = await tx.templateMensagem.create({
         data: {
           clinicaId,
           canal: 'whatsapp',
@@ -45,8 +46,8 @@ export async function garantirPadrao(clinicaId: string) {
           whatsappCategoria: 'utility',
           sistema: true,
         },
-      }),
-      prisma.templateMensagem.create({
+      });
+      const reagendamento = await tx.templateMensagem.create({
         data: {
           clinicaId,
           canal: 'whatsapp',
@@ -57,8 +58,8 @@ export async function garantirPadrao(clinicaId: string) {
           whatsappCategoria: 'utility',
           sistema: true,
         },
-      }),
-      prisma.templateMensagem.create({
+      });
+      const cancelamento = await tx.templateMensagem.create({
         data: {
           clinicaId,
           canal: 'whatsapp',
@@ -69,8 +70,9 @@ export async function garantirPadrao(clinicaId: string) {
           whatsappCategoria: 'utility',
           sistema: true,
         },
-      }),
-    ]);
+      });
+      return [lembrete, confirmacao, reagendamento, cancelamento];
+    });
 
     const porChave = (canal: string, tipo: string) =>
       criados.find((item) => item.canal === canal && item.tipo === tipo)?.id ?? null;

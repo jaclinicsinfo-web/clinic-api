@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
+import { transacao } from '../lib/tenant';
 
 const incluir = {
   procedimento: { select: { id: true, nome: true } },
@@ -79,9 +80,13 @@ export async function criarProduto(dados: DadosProduto) {
   });
 }
 
-export async function atualizarProduto(id: string, dados: Omit<DadosProduto, 'clinicaId' | 'quantidadeAtual'>) {
+export async function atualizarProduto(
+  id: string,
+  clinicaId: string,
+  dados: Omit<DadosProduto, 'clinicaId' | 'quantidadeAtual'>,
+) {
   return prisma.produtoEstoque.update({
-    where: { id },
+    where: { id, clinicaId },
     data: {
       nome: dados.nome,
       categoria: dados.categoria,
@@ -93,8 +98,8 @@ export async function atualizarProduto(id: string, dados: Omit<DadosProduto, 'cl
   });
 }
 
-export async function alterarAtivoProduto(id: string, ativo: boolean) {
-  return prisma.produtoEstoque.update({ where: { id }, data: { ativo } });
+export async function alterarAtivoProduto(id: string, clinicaId: string, ativo: boolean) {
+  return prisma.produtoEstoque.update({ where: { id, clinicaId }, data: { ativo } });
 }
 
 export async function listarMovimentacoes(clinicaId: string): Promise<MovimentacaoCompleta[]> {
@@ -108,7 +113,7 @@ export async function listarMovimentacoes(clinicaId: string): Promise<Movimentac
 export async function registrarMovimentacao(dados: DadosMovimentacao) {
   const delta = dados.tipo === 'entrada' ? dados.quantidade : -dados.quantidade;
 
-  return prisma.$transaction(async (tx) => {
+  return transacao(async (tx) => {
     const produto = await tx.produtoEstoque.findFirst({ where: { id: dados.produtoId, clinicaId: dados.clinicaId } });
     if (!produto) return null;
 
@@ -133,7 +138,7 @@ export async function registrarMovimentacao(dados: DadosMovimentacao) {
     });
 
     const atualizado = await tx.produtoEstoque.update({
-      where: { id: produto.id },
+      where: { id: produto.id, clinicaId: dados.clinicaId },
       data: { quantidadeAtual: saldo },
     });
 

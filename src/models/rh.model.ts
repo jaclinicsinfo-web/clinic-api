@@ -116,20 +116,21 @@ export async function criarRegistroPonto(dados: DadosPonto) {
 
 export async function atualizarRegistroPonto(
   id: string,
+  clinicaId: string,
   dados: Omit<DadosPonto, 'clinicaId' | 'usuarioId' | 'data' | 'origem' | 'registradoPorId'> & {
     origem?: string;
     registradoPorId?: string;
   },
 ) {
   return prisma.registroPonto.update({
-    where: { id },
+    where: { id, clinicaId },
     data: dados,
     include: incluirPonto,
   });
 }
 
-export async function removerRegistroPonto(id: string) {
-  await prisma.registroPonto.delete({ where: { id } });
+export async function removerRegistroPonto(id: string, clinicaId: string) {
+  await prisma.registroPonto.delete({ where: { id, clinicaId } });
 }
 
 export async function listarHolerites(params: {
@@ -195,6 +196,6 @@ export async function criarHolerite(dados: DadosHolerite) {
   });
 }
 
-export async function removerHolerite(id: string) {
-  await prisma.holerite.delete({ where: { id } });
+export async function removerHolerite(id: string, clinicaId: string) {
+  await prisma.holerite.delete({ where: { id, clinicaId } });
 }

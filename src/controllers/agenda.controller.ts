@@ -39,6 +39,7 @@ import {
 import { buscarPorIdEClinica as buscarProcedimento, listarAtivosPorClinica as listarProcedimentosAtivos } from '../models/procedimento.model';
 import { buscarPorIdEClinica as buscarConvenio, listarAtivosPorClinica as listarConveniosAtivos } from '../models/convenio.model';
 import { possuiAcessoUnidade } from '../models/usuario.model';
+import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
 import { carregarContextoClinico, exigirProfissionalVinculado, exigirUnidade } from '../lib/escopo';
 import { AppError } from '../lib/erros';
 import { dataDeIso, dataCivil, dinheiro, hojeCivil } from '../lib/datas';
@@ -233,7 +234,8 @@ export async function criarAgendamento(req: Request, res: Response, next: NextFu
     const { profissionalIdEscopo, somenteProprios } = await carregarContextoClinico(req);
     exigirProfissionalVinculado(somenteProprios, profissionalIdEscopo);
 
-    if (!(await possuiAcessoUnidade(req.auth!.sub, unidadeId))) {
+    const unidade = await buscarUnidadePorId(unidadeId);
+    if (!(await possuiAcessoUnidade(req.auth!.sub, unidadeId)) || !unidade || unidade.clinicaId !== clinicaId) {
       throw new AppError(403, 'Você não tem acesso a esta unidade.');
     }
 
@@ -310,7 +312,7 @@ export async function atualizarAgendamento(req: Request, res: Response, next: Ne
       profissionalIdEscopo,
     });
 
-    const atualizado = await atualizar(agendamento.id, {
+    const atualizado = await atualizar(agendamento.id, agendamento.clinicaId, {
       pacienteId: dados.pacienteId,
       profissionalId: dados.profissionalId,
       procedimentoId: dados.procedimentoId,
@@ -357,7 +359,7 @@ export async function alterarStatusAgendamento(req: Request, res: Response, next
       throw new AppError(400, 'Essa transição de status não é permitida.');
     }
 
-    const atualizado = await alterarStatus(agendamento.id, status);
+    const atualizado = await alterarStatus(agendamento.id, agendamento.clinicaId, status);
     if (status === 'atendido') {
       await garantirDoAgendamento({
         clinicaId: atualizado.clinicaId,
@@ -411,7 +413,7 @@ export async function reagendarAgendamento(req: Request, res: Response, next: Ne
       throw new AppError(409, 'Já existe um agendamento ou bloqueio neste horário.');
     }
 
-    const atualizado = await reagendar(agendamento.id, {
+    const atualizado = await reagendar(agendamento.id, agendamento.clinicaId, {
       data,
       horaInicio: dados.horaInicio,
       horaFim: dados.horaFim,
@@ -429,7 +431,7 @@ export async function marcarLembreteAgendamento(req: Request, res: Response, nex
     const { profissionalIdEscopo, somenteProprios } = await carregarContextoClinico(req);
     exigirProfissionalVinculado(somenteProprios, profissionalIdEscopo);
     const agendamento = await carregarAgendamento(req, profissionalIdEscopo);
-    const atualizado = await marcarLembrete(agendamento.id, true);
+    const atualizado = await marcarLembrete(agendamento.id, agendamento.clinicaId, true);
     res.json(montarAgendamento(atualizado));
   } catch (err) {
     next(err);
@@ -488,7 +490,7 @@ export async function removerBloqueioAgenda(req: Request, res: Response, next: N
     if (profissionalIdEscopo && bloqueio.profissionalId !== profissionalIdEscopo) {
       throw new AppError(404, 'Bloqueio não encontrado.');
     }
-    await removerBloqueio(id);
+    await removerBloqueio(id, req.auth!.clinicaId);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -501,6 +503,10 @@ export async function criarItemEspera(req: Request, res: Response, next: NextFun
     const unidadeId = exigirUnidade(req);
     const { profissionalIdEscopo, somenteProprios } = await carregarContextoClinico(req);
     exigirProfissionalVinculado(somenteProprios, profissionalIdEscopo);
+    const unidade = await buscarUnidadePorId(unidadeId);
+    if (!(await possuiAcessoUnidade(req.auth!.sub, unidadeId)) || !unidade || unidade.clinicaId !== clinicaId) {
+      throw new AppError(403, 'Você não tem acesso a esta unidade.');
+    }
     const dados = esperaBodySchema.parse(req.body);
 
     const paciente = await buscarPaciente(dados.pacienteId, clinicaId);
@@ -551,7 +557,7 @@ export async function encaixarEspera(req: Request, res: Response, next: NextFunc
     if (profissionalIdEscopo && item.profissionalId && item.profissionalId !== profissionalIdEscopo) {
       throw new AppError(404, 'Item da lista de espera não encontrado.');
     }
-    const atualizado = await marcarEsperaEncaixada(id);
+    const atualizado = await marcarEsperaEncaixada(id, req.auth!.clinicaId);
     res.json(montarEspera(atualizado));
   } catch (err) {
     next(err);
@@ -570,7 +576,7 @@ export async function removerItemEspera(req: Request, res: Response, next: NextF
     if (profissionalIdEscopo && item.profissionalId && item.profissionalId !== profissionalIdEscopo) {
       throw new AppError(404, 'Item da lista de espera não encontrado.');
     }
-    await removerEspera(id);
+    await removerEspera(id, req.auth!.clinicaId);
     res.status(204).send();
   } catch (err) {
     next(err);

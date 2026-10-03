@@ -188,7 +188,7 @@ export async function criarProfissional(req: Request, res: Response, next: NextF
     if (await cpfJaExiste(clinicaId, dados.cpf)) {
       throw new AppError(409, 'Já existe um profissional com este CPF nesta clínica.');
     }
-    if (dados.usuarioId && (await usuarioJaVinculado(dados.usuarioId))) {
+    if (dados.usuarioId && (await usuarioJaVinculado(dados.usuarioId, clinicaId))) {
       throw new AppError(409, 'Esta conta de login já está vinculada a outro profissional.');
     }
 
@@ -207,7 +207,7 @@ export async function atualizarProfissional(req: Request, res: Response, next: N
     if (await cpfJaExiste(profissional.clinicaId, dados.cpf, profissional.id)) {
       throw new AppError(409, 'Já existe um profissional com este CPF nesta clínica.');
     }
-    if (dados.usuarioId && (await usuarioJaVinculado(dados.usuarioId, profissional.id))) {
+    if (dados.usuarioId && (await usuarioJaVinculado(dados.usuarioId, profissional.clinicaId, profissional.id))) {
       throw new AppError(409, 'Esta conta de login já está vinculada a outro profissional.');
     }
 
@@ -225,7 +225,7 @@ export async function inativarProfissional(req: Request, res: Response, next: Ne
       res.json(montarProfissional(profissional));
       return;
     }
-    const atualizado = await alterarStatus(profissional.id, 'inativo');
+    const atualizado = await alterarStatus(profissional.id, profissional.clinicaId, 'inativo');
     res.json(montarProfissional(atualizado));
   } catch (err) {
     next(err);
@@ -239,7 +239,7 @@ export async function ativarProfissional(req: Request, res: Response, next: Next
       res.json(montarProfissional(profissional));
       return;
     }
-    const atualizado = await alterarStatus(profissional.id, 'ativo');
+    const atualizado = await alterarStatus(profissional.id, profissional.clinicaId, 'ativo');
     res.json(montarProfissional(atualizado));
   } catch (err) {
     next(err);

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
+import { transacao } from '../lib/tenant';
 
 const incluir = {
   tabelaPrecos: true,
@@ -77,10 +78,11 @@ export async function criar(dados: DadosConvenio): Promise<ConvenioCompleto> {
 
 export async function atualizar(
   id: string,
+  clinicaId: string,
   dados: Omit<DadosConvenio, 'clinicaId'>,
 ): Promise<ConvenioCompleto> {
   return prisma.convenio.update({
-    where: { id },
+    where: { id, clinicaId },
     data: {
       nome: dados.nome,
       registroAns: dados.registroAns,
@@ -95,9 +97,13 @@ export async function atualizar(
   });
 }
 
-export async function alterarStatus(id: string, status: string): Promise<ConvenioCompleto> {
+export async function alterarStatus(
+  id: string,
+  clinicaId: string,
+  status: string,
+): Promise<ConvenioCompleto> {
   return prisma.convenio.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status },
     include: incluir,
   });
@@ -105,25 +111,32 @@ export async function alterarStatus(id: string, status: string): Promise<Conveni
 
 export async function substituirTabelaPrecos(
   convenioId: string,
+  clinicaId: string,
   precos: { procedimentoId: string; valor: number }[],
 ): Promise<ConvenioCompleto> {
-  await prisma.$transaction([
-    prisma.convenioProcedimento.deleteMany({ where: { convenioId } }),
-    ...(precos.length > 0
-      ? [
-          prisma.convenioProcedimento.createMany({
-            data: precos.map((item) => ({
-              convenioId,
-              procedimentoId: item.procedimentoId,
-              valor: item.valor,
-            })),
-          }),
-        ]
-      : []),
-  ]);
+  await transacao(async (tx) => {
+    const convenio = await tx.convenio.findFirst({
+      where: { id: convenioId, clinicaId },
+      select: { id: true },
+    });
+    if (!convenio) {
+      throw new Error('Convênio não encontrado após atualizar a tabela.');
+    }
 
-  const atualizado = await prisma.convenio.findUnique({
-    where: { id: convenioId },
+    await tx.convenioProcedimento.deleteMany({ where: { convenioId: convenio.id } });
+    if (precos.length > 0) {
+      await tx.convenioProcedimento.createMany({
+        data: precos.map((item) => ({
+          convenioId: convenio.id,
+          procedimentoId: item.procedimentoId,
+          valor: item.valor,
+        })),
+      });
+    }
+  });
+
+  const atualizado = await prisma.convenio.findFirst({
+    where: { id: convenioId, clinicaId },
     include: incluir,
   });
   if (!atualizado) {

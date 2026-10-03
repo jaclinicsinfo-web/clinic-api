@@ -1,8 +1,6 @@
-import { Prisma, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
+import { prisma, type ClientePrisma } from '../config/database';
 import { FORMAS_PADRAO } from '../lib/financeiro';
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
+import { transacao } from '../lib/tenant';
 
 export async function criarPadrao(clinicaId: string, tx: ClientePrisma = prisma) {
   await tx.formaPagamento.createMany({
@@ -34,7 +32,7 @@ export async function substituir(
   clinicaId: string,
   itens: { codigo: string; nome: string; taxa: number; ativo: boolean; ordem: number }[],
 ) {
-  await prisma.$transaction(async (tx) => {
+  await transacao(async (tx) => {
     const atuais = await tx.formaPagamento.findMany({ where: { clinicaId } });
     const porCodigo = new Map(atuais.map((item) => [item.codigo, item]));
 
@@ -42,7 +40,7 @@ export async function substituir(
       const existente = porCodigo.get(item.codigo);
       if (existente) {
         await tx.formaPagamento.update({
-          where: { id: existente.id },
+          where: { id: existente.id, clinicaId },
           data: { nome: item.nome, taxa: item.taxa, ativo: item.ativo, ordem: item.ordem },
         });
         porCodigo.delete(item.codigo);

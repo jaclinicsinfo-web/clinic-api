@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verificarToken } from '../lib/jwt';
 import { AppError } from '../lib/erros';
+import { contextoTenant } from '../lib/tenant';
 
 export function autenticar(
   req: Request,
@@ -17,7 +18,7 @@ export function autenticar(
 
   try {
     req.auth = verificarToken(token);
-    next();
+    contextoTenant.run({ clinicaId: req.auth.clinicaId, modoSistema: false }, () => next());
   } catch {
     next(new AppError(401, 'Sessão expirada. Entre novamente.'));
   }

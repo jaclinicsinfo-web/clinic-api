@@ -81,28 +81,33 @@ export async function criarEnvioSeNovo(dados: Prisma.EnvioLembreteUncheckedCreat
   }
 }
 
-export async function listarPendentes(agora = new Date(), take = 50) {
+export async function listarPendentes(agora = new Date(), take = 50, clinicaId?: string) {
   return prisma.envioLembrete.findMany({
     where: {
       status: 'pendente',
       processarEm: { lte: agora },
+      ...(clinicaId ? { clinicaId } : {}),
     },
     orderBy: { processarEm: 'asc' },
     take,
   });
 }
 
-export async function reivindicarEnvio(id: string) {
+export async function reivindicarEnvio(id: string, clinicaId: string) {
   const resultado = await prisma.envioLembrete.updateMany({
-    where: { id, status: 'pendente' },
+    where: { id, clinicaId, status: 'pendente' },
     data: { status: 'processando', tentativas: { increment: 1 } },
   });
   if (resultado.count === 0) return null;
-  return prisma.envioLembrete.findUnique({ where: { id } });
+  return prisma.envioLembrete.findFirst({ where: { id, clinicaId } });
 }
 
-export async function atualizarEnvio(id: string, dados: Prisma.EnvioLembreteUpdateInput) {
-  return prisma.envioLembrete.update({ where: { id }, data: dados });
+export async function atualizarEnvio(
+  id: string,
+  clinicaId: string,
+  dados: Prisma.EnvioLembreteUpdateInput,
+) {
+  return prisma.envioLembrete.update({ where: { id, clinicaId }, data: dados });
 }
 
 export async function cancelarPendentesDoAgendamento(params: {
@@ -140,7 +145,7 @@ export async function atualizarPorProvedor(params: {
 
   const agora = new Date();
   return prisma.envioLembrete.update({
-    where: { id: envio.id },
+    where: { id: envio.id, clinicaId: envio.clinicaId },
     data: {
       status: params.status,
       erro: params.erro ?? envio.erro,
@@ -151,9 +156,9 @@ export async function atualizarPorProvedor(params: {
   });
 }
 
-export async function marcarLembreteAgendamento(agendamentoId: string) {
+export async function marcarLembreteAgendamento(agendamentoId: string, clinicaId: string) {
   return prisma.agendamento.update({
-    where: { id: agendamentoId },
+    where: { id: agendamentoId, clinicaId },
     data: { lembreteEnviado: true },
   });
 }

@@ -1,8 +1,6 @@
-import { Prisma, PerfilAcesso, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
+import { Prisma, PerfilAcesso } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../config/database';
 import { PERFIS_PADRAO } from '../lib/perfis-padrao';
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
 
 export async function criarPerfisPadrao(
   clinicaId: string,
@@ -26,10 +24,6 @@ export async function criarPerfisPadrao(
   return criados;
 }
 
-export async function buscarPorId(id: string): Promise<PerfilAcesso | null> {
-  return prisma.perfilAcesso.findUnique({ where: { id } });
-}
-
 export async function listarPorClinica(clinicaId: string): Promise<PerfilAcesso[]> {
   return prisma.perfilAcesso.findMany({
     where: { clinicaId },
@@ -46,10 +40,11 @@ export async function buscarPorIdEClinica(
 
 export async function atualizarPermissoes(
   id: string,
+  clinicaId: string,
   permissoes: Prisma.InputJsonValue,
 ): Promise<PerfilAcesso> {
   return prisma.perfilAcesso.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { permissoes },
   });
 }

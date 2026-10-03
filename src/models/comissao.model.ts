@@ -46,12 +46,12 @@ export async function upsertPrevista(params: {
   if (existente) {
     if (existente.status !== 'prevista') {
       return prisma.comissao.findFirstOrThrow({
-        where: { id: existente.id },
+        where: { id: existente.id, clinicaId: params.clinicaId },
         include: incluir,
       });
     }
     return prisma.comissao.update({
-      where: { id: existente.id },
+      where: { id: existente.id, clinicaId: params.clinicaId },
       data: {
         atendimentos: params.atendimentos,
         faturamentoGerado: params.faturamentoGerado,
@@ -68,9 +68,9 @@ export async function upsertPrevista(params: {
   });
 }
 
-export async function aprovar(id: string): Promise<ComissaoCompleta> {
+export async function aprovar(id: string, clinicaId: string): Promise<ComissaoCompleta> {
   return prisma.comissao.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status: 'aprovada' },
     include: incluir,
   });
@@ -84,9 +84,9 @@ export async function aprovarPrevistas(clinicaId: string, competencia: string) {
   return listarPorClinica(clinicaId);
 }
 
-export async function pagar(id: string, pagoEm: Date): Promise<ComissaoCompleta> {
+export async function pagar(id: string, clinicaId: string, pagoEm: Date): Promise<ComissaoCompleta> {
   return prisma.comissao.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status: 'paga', pagoEm },
     include: incluir,
   });

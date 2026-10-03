@@ -45,6 +45,7 @@ export async function atualizar(
 
     const atualizado = await atualizarPermissoes(
       id,
+      clinicaId,
       permissoesComoMapa(dados.permissoes) as unknown as Prisma.InputJsonValue,
     );
 

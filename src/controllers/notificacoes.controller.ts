@@ -25,10 +25,10 @@ export async function listarNotificacoes(req: Request, res: Response, next: Next
     await sincronizarOperacionais({
       clinicaId: usuario.clinicaId,
       usuarioId: usuario.id,
-      permissoes: permissoesEfetivas(usuario.perfil),
+      permissoes: permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo),
     });
 
-    const notificacoes = await listarDoUsuario(usuario.id);
+    const notificacoes = await listarDoUsuario(usuario.id, usuario.clinicaId);
     res.json(montarListaNotificacoes(notificacoes));
   } catch (err) {
     next(err);
@@ -38,7 +38,7 @@ export async function listarNotificacoes(req: Request, res: Response, next: Next
 export async function marcarNotificacaoLida(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = idParamSchema.parse(req.params);
-    const atualizada = await marcarLida(id, req.auth!.sub);
+    const atualizada = await marcarLida(id, req.auth!.sub, req.auth!.clinicaId);
     if (!atualizada) {
       throw new AppError(404, 'Notificação não encontrada.');
     }
@@ -50,8 +50,8 @@ export async function marcarNotificacaoLida(req: Request, res: Response, next: N
 
 export async function marcarNotificacoesLidas(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    await marcarTodasLidas(req.auth!.sub);
-    const notificacoes = await listarDoUsuario(req.auth!.sub);
+    await marcarTodasLidas(req.auth!.sub, req.auth!.clinicaId);
+    const notificacoes = await listarDoUsuario(req.auth!.sub, req.auth!.clinicaId);
     res.json(montarListaNotificacoes(notificacoes));
   } catch (err) {
     next(err);

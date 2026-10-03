@@ -59,10 +59,11 @@ export async function criarAcompanhamento(dados: {
 
 export async function encerrarAcompanhamento(
   id: string,
+  clinicaId: string,
   dados: { altaEm: Date; resumoAlta: string | null },
 ): Promise<AcompanhamentoCompleto> {
   return prisma.acompanhamentoClinico.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status: 'alta', altaEm: dados.altaEm, resumoAlta: dados.resumoAlta },
     include: incluirAcompanhamento,
   });

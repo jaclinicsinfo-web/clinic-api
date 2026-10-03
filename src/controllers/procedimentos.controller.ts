@@ -61,7 +61,7 @@ export async function atualizarProcedimento(req: Request, res: Response, next: N
       throw new AppError(409, 'Já existe um procedimento com este nome.');
     }
 
-    const atualizado = await atualizar(procedimento.id, {
+    const atualizado = await atualizar(procedimento.id, procedimento.clinicaId, {
       nome: dados.nome,
       categoria: dados.categoria,
       duracaoPadraoMin: dados.duracaoPadraoMin,
@@ -81,7 +81,7 @@ export async function inativarProcedimento(req: Request, res: Response, next: Ne
       res.json(montarProcedimento(procedimento));
       return;
     }
-    const atualizado = await alterarStatus(procedimento.id, 'inativo');
+    const atualizado = await alterarStatus(procedimento.id, procedimento.clinicaId, 'inativo');
     res.json(montarProcedimento(atualizado));
   } catch (err) {
     next(err);
@@ -95,7 +95,7 @@ export async function ativarProcedimento(req: Request, res: Response, next: Next
       res.json(montarProcedimento(procedimento));
       return;
     }
-    const atualizado = await alterarStatus(procedimento.id, 'ativo');
+    const atualizado = await alterarStatus(procedimento.id, procedimento.clinicaId, 'ativo');
     res.json(montarProcedimento(atualizado));
   } catch (err) {
     next(err);

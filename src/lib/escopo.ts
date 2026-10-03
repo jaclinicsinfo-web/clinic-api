@@ -5,7 +5,10 @@ import { NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_GESTOR, NOME_PERFIL_PROFISSIONAL
 import { temAcessoAoModulo } from './permissoes';
 import { AppError } from './erros';
 
-type UsuarioComPerfil = { perfil: { nome: string; permissoes: unknown } };
+type UsuarioComPerfil = {
+  perfil: { nome: string; permissoes: unknown };
+  clinica: { plano: { codigo: string } };
+};
 
 export function ehProfissionalSaude(perfilNome: string) {
   return perfilNome === NOME_PERFIL_PROFISSIONAL_SAUDE;

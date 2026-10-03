@@ -47,10 +47,11 @@ export async function criar(dados: DadosDespesa) {
 
 export async function atualizar(
   id: string,
+  clinicaId: string,
   dados: Omit<DadosDespesa, 'clinicaId' | 'unidadeId'>,
 ) {
   return prisma.despesa.update({
-    where: { id },
+    where: { id, clinicaId },
     data: {
       descricao: dados.descricao,
       categoria: dados.categoria,
@@ -66,12 +67,13 @@ export async function atualizar(
 
 export async function registrarPagamento(params: {
   id: string;
+  clinicaId: string;
   formaPagamento: string;
   pagoEm: Date;
   observacoes?: string | null;
 }) {
   return prisma.despesa.update({
-    where: { id: params.id },
+    where: { id: params.id, clinicaId: params.clinicaId },
     data: {
       status: 'pago',
       formaPagamento: params.formaPagamento,
@@ -81,8 +83,8 @@ export async function registrarPagamento(params: {
   });
 }
 
-export async function remover(id: string) {
-  await prisma.despesa.delete({ where: { id } });
+export async function remover(id: string, clinicaId: string) {
+  await prisma.despesa.delete({ where: { id, clinicaId } });
 }
 
 export async function listarPagasEntre(clinicaId: string, inicio: Date, fim: Date) {

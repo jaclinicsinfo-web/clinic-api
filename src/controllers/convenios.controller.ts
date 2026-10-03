@@ -117,7 +117,7 @@ export async function atualizarConvenio(req: Request, res: Response, next: NextF
       throw new AppError(409, 'Já existe um convênio com este nome.');
     }
 
-    const atualizado = await atualizar(convenio.id, {
+    const atualizado = await atualizar(convenio.id, convenio.clinicaId, {
       nome: dados.nome,
       registroAns: dados.registroAns,
       prazoPagamentoDias: dados.prazoPagamentoDias,
@@ -140,7 +140,7 @@ export async function inativarConvenio(req: Request, res: Response, next: NextFu
       res.json(montarConvenio(convenio));
       return;
     }
-    const atualizado = await alterarStatus(convenio.id, 'inativo');
+    const atualizado = await alterarStatus(convenio.id, convenio.clinicaId, 'inativo');
     res.json(montarConvenio(atualizado));
   } catch (err) {
     next(err);
@@ -154,7 +154,7 @@ export async function ativarConvenio(req: Request, res: Response, next: NextFunc
       res.json(montarConvenio(convenio));
       return;
     }
-    const atualizado = await alterarStatus(convenio.id, 'ativo');
+    const atualizado = await alterarStatus(convenio.id, convenio.clinicaId, 'ativo');
     res.json(montarConvenio(atualizado));
   } catch (err) {
     next(err);
@@ -172,7 +172,7 @@ export async function salvarTabelaConvenio(req: Request, res: Response, next: Ne
       throw new AppError(400, 'Um ou mais procedimentos não pertencem a esta clínica.');
     }
 
-    const atualizado = await substituirTabelaPrecos(convenio.id, filtrados);
+    const atualizado = await substituirTabelaPrecos(convenio.id, convenio.clinicaId, filtrados);
     res.json(montarConvenio(atualizado));
   } catch (err) {
     next(err);

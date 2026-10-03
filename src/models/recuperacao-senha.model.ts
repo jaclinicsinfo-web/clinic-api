@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import { gerarHash } from '../lib/password';
 import { gerarTokenOpaco, hashToken } from '../lib/token';
+import { comTenant, comoSistema, transacao } from '../lib/tenant';
 
 const VALIDADE_MS = 60 * 60 * 1000;
 
@@ -23,10 +24,12 @@ export async function criarRecuperacao(usuarioId: string) {
 }
 
 export async function redefinirComToken(token: string, senha: string) {
-  const registro = await prisma.recuperacaoSenha.findUnique({
-    where: { tokenHash: hashToken(token) },
-    include: { usuario: { select: { id: true, status: true } } },
-  });
+  const registro = await comoSistema(() =>
+    prisma.recuperacaoSenha.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { usuario: { select: { id: true, status: true, clinicaId: true } } },
+    }),
+  );
 
   if (!registro || registro.usadoEm || registro.expiraEm.getTime() < Date.now()) {
     return null;
@@ -37,10 +40,12 @@ export async function redefinirComToken(token: string, senha: string) {
   }
 
   const senhaHash = await gerarHash(senha);
-  await prisma.$transaction([
-    prisma.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash } }),
-    prisma.recuperacaoSenha.update({ where: { id: registro.id }, data: { usadoEm: new Date() } }),
-  ]);
+  await comTenant(registro.usuario.clinicaId, () =>
+    transacao(async (tx) => {
+      await tx.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash } });
+      await tx.recuperacaoSenha.update({ where: { id: registro.id }, data: { usadoEm: new Date() } });
+    }),
+  );
 
   return registro.usuarioId;
 }

@@ -64,9 +64,14 @@ export async function criar(params: {
   });
 }
 
-export async function enviar(id: string, enviadoEm: Date, previsaoPagamento: Date): Promise<LoteCompleto> {
+export async function enviar(
+  id: string,
+  clinicaId: string,
+  enviadoEm: Date,
+  previsaoPagamento: Date,
+): Promise<LoteCompleto> {
   return prisma.loteConvenio.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status: 'enviado', enviadoEm, previsaoPagamento },
     include: incluir,
   });
@@ -74,12 +79,13 @@ export async function enviar(id: string, enviadoEm: Date, previsaoPagamento: Dat
 
 export async function reconciliar(params: {
   id: string;
+  clinicaId: string;
   valorGlosado: number;
   valorRecebido: number;
   status: string;
 }): Promise<LoteCompleto> {
   return prisma.loteConvenio.update({
-    where: { id: params.id },
+    where: { id: params.id, clinicaId: params.clinicaId },
     data: {
       valorGlosado: params.valorGlosado,
       valorRecebido: params.valorRecebido,

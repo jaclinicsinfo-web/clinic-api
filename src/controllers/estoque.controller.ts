@@ -68,7 +68,7 @@ export async function atualizarProdutoEstoque(req: Request, res: Response, next:
       throw new AppError(409, 'Já existe um produto com este nome.');
     }
 
-    const atualizado = await atualizarProduto(produto.id, dados);
+    const atualizado = await atualizarProduto(produto.id, produto.clinicaId, dados);
     res.json(montarProduto(atualizado));
   } catch (err) {
     next(err);
@@ -78,7 +78,7 @@ export async function atualizarProdutoEstoque(req: Request, res: Response, next:
 export async function inativarProdutoEstoque(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const produto = await carregarProduto(req);
-    const atualizado = await alterarAtivoProduto(produto.id, !produto.ativo);
+    const atualizado = await alterarAtivoProduto(produto.id, produto.clinicaId, !produto.ativo);
     res.json(montarProduto(atualizado));
   } catch (err) {
     next(err);

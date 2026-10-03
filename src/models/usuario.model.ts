@@ -1,11 +1,9 @@
-import { Prisma, Usuario, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
+import { Prisma, Usuario } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../config/database';
 import { gerarHash } from '../lib/password';
 import { NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_PROFISSIONAL_SAUDE } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
 import { assertPodeAdicionarUsuario } from './plano.model';
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
 
 const incluirRelacoes = {
   perfil: true,
@@ -82,9 +80,10 @@ export async function listarPorClinica(clinicaId: string): Promise<UsuarioComple
 
 export async function alterarPerfil(
   id: string,
+  clinicaId: string,
   perfilId: string,
 ): Promise<UsuarioCompleto> {
-  await prisma.usuario.update({ where: { id }, data: { perfilId } });
+  await prisma.usuario.update({ where: { id, clinicaId }, data: { perfilId } });
 
   const atualizado = await buscarPorId(id);
   if (!atualizado) {
@@ -95,17 +94,18 @@ export async function alterarPerfil(
 
 export async function alterarStatus(
   id: string,
+  clinicaId: string,
   status: 'ativo' | 'inativo',
 ): Promise<UsuarioCompleto> {
   if (status === 'ativo') {
     const atual = await buscarPorId(id);
-    if (!atual) {
+    if (!atual || atual.clinicaId !== clinicaId) {
       throw new AppError(404, 'Usuário não encontrado.');
     }
-    await assertPodeAdicionarUsuario(atual.clinicaId);
+    await assertPodeAdicionarUsuario(clinicaId);
   }
 
-  await prisma.usuario.update({ where: { id }, data: { status } });
+  await prisma.usuario.update({ where: { id, clinicaId }, data: { status } });
 
   const atualizado = await buscarPorId(id);
   if (!atualizado) {
@@ -140,19 +140,27 @@ export async function contarAdminsAtivos(
   });
 }
 
-export async function registrarAcesso(id: string): Promise<void> {
+export async function atualizarNome(id: string, clinicaId: string, nome: string): Promise<void> {
   await prisma.usuario.update({
-    where: { id },
+    where: { id, clinicaId },
+    data: { nome },
+  });
+}
+
+export async function registrarAcesso(id: string, clinicaId: string): Promise<void> {
+  await prisma.usuario.update({
+    where: { id, clinicaId },
     data: { ultimoAcesso: new Date() },
   });
 }
 
 export async function atualizarTema(
   id: string,
+  clinicaId: string,
   tema: 'claro' | 'escuro',
 ): Promise<UsuarioCompleto> {
   await prisma.usuario.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { tema },
   });
 

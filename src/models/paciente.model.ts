@@ -1,7 +1,5 @@
-import { Prisma, PrismaClient } from '@prisma/client';
-import { prisma } from '../config/database';
-
-type ClientePrisma = PrismaClient | Prisma.TransactionClient;
+import { Prisma } from '@prisma/client';
+import { prisma, type ClientePrisma } from '../config/database';
 
 const incluirRelacoes = {
   convenio: { select: { id: true, nome: true, status: true } },
@@ -175,10 +173,11 @@ export async function criar(
 
 export async function atualizar(
   id: string,
+  clinicaId: string,
   dados: Omit<DadosPaciente, 'clinicaId' | 'unidadeId' | 'status'> & { status?: string },
 ): Promise<PacienteCompleto> {
   return prisma.paciente.update({
-    where: { id },
+    where: { id, clinicaId },
     data: {
       nome: dados.nome,
       cpf: dados.cpf,
@@ -218,9 +217,13 @@ export async function atualizar(
   });
 }
 
-export async function alterarStatus(id: string, status: string): Promise<PacienteCompleto> {
+export async function alterarStatus(
+  id: string,
+  clinicaId: string,
+  status: string,
+): Promise<PacienteCompleto> {
   return prisma.paciente.update({
-    where: { id },
+    where: { id, clinicaId },
     data: { status },
     include: incluirRelacoes,
   });

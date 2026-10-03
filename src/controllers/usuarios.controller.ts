@@ -141,7 +141,7 @@ async function mudarStatus(
     }
   }
 
-  const usuario = await alterarStatus(id, proximoStatus);
+  const usuario = await alterarStatus(id, clinicaId, proximoStatus);
   const uso = await usoDaClinica(clinicaId);
   res.json(montarUsuarioMutacao({ usuario, uso }));
 }
@@ -202,7 +202,7 @@ export async function atualizarPerfil(
     }
 
     const usuario =
-      alvo.perfilId === perfilId ? alvo : await persistirPerfil(id, perfilId);
+      alvo.perfilId === perfilId ? alvo : await persistirPerfil(id, clinicaId, perfilId);
     const uso = await usoDaClinica(clinicaId);
     res.json(montarUsuarioMutacao({ usuario, uso }));
   } catch (err) {
