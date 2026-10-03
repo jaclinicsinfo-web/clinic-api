@@ -24,15 +24,6 @@ export async function buscarPorId(id: string): Promise<Plano | null> {
   return prisma.plano.findUnique({ where: { id } });
 }
 
-/** Plano da primeira clínica criada pelo setup. Clínicas existentes não seguem mais esta env. */
-export async function planoDoSetupInicial(codigo: string): Promise<Plano> {
-  const plano = await buscarPorCodigo(codigo);
-  if (!plano || !plano.ativo) {
-    throw new AppError(500, 'Plano configurado no servidor é inválido.');
-  }
-  return plano;
-}
-
 export async function usoDaClinica(
   clinicaId: string,
   tx: ClientePrisma = prisma,

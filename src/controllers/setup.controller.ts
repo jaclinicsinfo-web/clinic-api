@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { env } from '../config/env';
 import { setupSchema } from '../validators/setup.validator';
-import { planoDoSetupInicial, usoDaClinica } from '../models/plano.model';
+import { buscarPorCodigo, usoDaClinica } from '../models/plano.model';
 import {
   buscarPorCnpj,
   criarSetupInicial,
@@ -40,7 +39,10 @@ export async function concluir(
 
       const dados = setupSchema.parse(req.body);
 
-      const plano = await planoDoSetupInicial(env.PLANO);
+      const plano = await buscarPorCodigo(dados.plano);
+      if (!plano || !plano.ativo) {
+        throw new AppError(400, 'Plano inválido.');
+      }
 
       const cnpjExistente = await buscarPorCnpj(dados.clinica.cnpj);
       if (cnpjExistente) {

@@ -4,8 +4,11 @@ import { cnpjValido, telefoneValido } from '../lib/validacao';
 
 const apenasDigitos = (valor: string): string => valor.replace(/\D/g, '');
 
-/** Primeiro acesso: clínica + unidade + admin. O plano vem de `PLANO` no ambiente. */
+/** Clínica + unidade + admin, com o banco vazio. O plano vem no corpo, como no cadastro. */
 export const setupSchema = z.object({
+  plano: z.enum(['essencial', 'profissional', 'ilimitado'], {
+    errorMap: () => ({ message: 'Plano inválido.' }),
+  }),
   clinica: z.object({
     nomeFantasia: z.string().trim().min(3, 'Nome fantasia deve ter no mínimo 3 caracteres.'),
     razaoSocial: z.string().trim().min(3, 'Razão social deve ter no mínimo 3 caracteres.'),

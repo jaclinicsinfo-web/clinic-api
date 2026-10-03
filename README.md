@@ -4,9 +4,9 @@ API REST do **ClinicERP**, o ERP back-office para clínicas (médicas, odontoló
 Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, **gestão de usuários**,
 **pacientes** e o **catálogo de planos** com limite de contas.
 
-> Não existe portal do paciente. Não há sign-up aberto. A primeira clínica e o administrador nascem no
-> painel (`POST /api/setup`) quando o banco está vazio. `PLANO` vale só para essa primeira clínica.
-> Clínicas novas entram por `POST /api/cadastro`. Os demais usuários entram em Configurações › Usuários.
+> Não existe portal do paciente. Não há sign-up aberto. A clínica e o administrador nascem no
+> clinic-panel, que chama `POST /api/cadastro` com o plano escolhido na criação. Os demais usuários
+> entram em Configurações › Usuários.
 
 ## Conceitos importantes
 
@@ -18,18 +18,18 @@ Esta entrega cobre **autenticação**, **setup do primeiro acesso** no painel, *
 - **5 perfis = papéis RBAC**, criados por clínica no cadastro: `Administrador`, `Gestor`, `Recepção`,
   `Profissional de saúde`, `Financeiro`. Existem nos 3 planos. Perfil é papel de permissão, **não** conta.
   O plano corta o módulo mesmo que o perfil tenha a permissão marcada.
-- **Plano por clínica.** `PLANO=essencial|profissional|ilimitado` só define o plano da primeira clínica
-  criada pelo setup. Trocar a variável e reiniciar a API não altera clínicas que já existem. Para mudar
-  o plano de um cliente, use o SQL do Apêndice B em `PLANEJAMENTO-MULTI-TENANT.md` (modo sistema +
-  `UPDATE` em `clinicas.planoId`).
+- **Plano por clínica.** O código (`essencial`, `profissional` ou `ilimitado`) vai no corpo da criação
+  e fica em `clinica.planoId`. O clinic-panel escolhe esse plano ao abrir a clínica e pode trocá-lo
+  depois, na ficha da clínica. Reiniciar a API não altera o plano de quem já existe.
 - **Isolamento multi-tenant.** O banco é compartilhado. Cada linha de negócio tem `clinicaId` (ou é filha
   de uma tabela que tem) e uma política RLS `tenant_isolamento`. A API grava `app.clinica_id` na sessão
   do Postgres a partir do JWT. Tabela nova de negócio precisa nascer com `clinicaId` e com a política do
   modelo na seção 5.5 do planejamento. `planos` e `_prisma_migrations` ficam sem RLS. Script manual que
   precise ver o banco inteiro deve abrir a transação com `SET LOCAL app.modo_sistema = 'on'`.
-- **Setup no painel = banco vazio.** `GET /setup/status` diz se ainda não existe clínica. `POST /setup`
-  cria clínica, 1 unidade, os 5 perfis e 1 usuário **Administrador** ativo, e devolve a sessão. Depois
-  disso o endpoint responde 409.
+- **Setup com banco vazio.** `GET /setup/status` diz se ainda não existe clínica. `POST /setup`
+  cria clínica, 1 unidade, os 5 perfis e 1 usuário **Administrador** ativo, e devolve a sessão.
+  O plano vem no corpo do pedido. Depois disso o endpoint responde 409. O clinic-panel cria as
+  clínicas pelo `POST /cadastro`, que também recebe o plano.
 - **Sem seed de clínica.** Depois do `migrate`, o banco fica vazio — exceto o **catálogo de 3 planos**,
   inserido pela própria migração de forma idempotente (`ON CONFLICT`).
 
@@ -155,12 +155,13 @@ curl http://localhost:3001/api/setup/status
 # { "precisaSetup": true }
 ```
 
-**Setup do primeiro acesso** (só funciona enquanto não existir clínica; o plano vem de `PLANO`)
+**Setup com o banco vazio** (o plano vem no corpo)
 
 ```bash
 curl -X POST http://localhost:3001/api/setup \
   -H "Content-Type: application/json" \
   -d '{
+    "plano": "essencial",
     "clinica": {
       "nomeFantasia": "Clínica Exemplo",
       "razaoSocial": "Clínica Exemplo LTDA",
