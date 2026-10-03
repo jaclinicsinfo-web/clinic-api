@@ -1,7 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
+import { prisma } from '../config/database';
 import { verificarToken } from '../lib/jwt';
 import { AppError } from '../lib/erros';
 import { contextoTenant } from '../lib/tenant';
+
+async function garantirClinicaAtiva(clinicaId: string): Promise<void> {
+  const clinica = await prisma.clinica.findUnique({
+    where: { id: clinicaId },
+    select: { status: true },
+  });
+
+  if (!clinica) {
+    throw new AppError(401, 'Não encontramos esse usuário.');
+  }
+
+  if (clinica.status !== 'ativa') {
+    throw new AppError(403, 'Esta clínica está desativada.');
+  }
+}
 
 export function autenticar(
   req: Request,
@@ -18,7 +34,9 @@ export function autenticar(
 
   try {
     req.auth = verificarToken(token);
-    contextoTenant.run({ clinicaId: req.auth.clinicaId, modoSistema: false }, () => next());
+    contextoTenant.run({ clinicaId: req.auth.clinicaId, modoSistema: false }, () => {
+      void garantirClinicaAtiva(req.auth!.clinicaId).then(() => next()).catch(next);
+    });
   } catch {
     next(new AppError(401, 'Sessão expirada. Entre novamente.'));
   }

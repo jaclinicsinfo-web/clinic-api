@@ -48,12 +48,16 @@ export async function login(
 
     const usuario = await comoSistema(() => buscarPorEmail(email));
     if (!usuario) {
-      throw new AppError(401, 'E-mail ou senha incorretos.');
+      throw new AppError(401, 'Não encontramos esse usuário.');
     }
 
     const senhaConfere = await conferirSenha(senha, usuario.senhaHash);
     if (!senhaConfere) {
       throw new AppError(401, 'E-mail ou senha incorretos.');
+    }
+
+    if (usuario.clinica.status !== 'ativa') {
+      throw new AppError(403, 'Esta clínica está desativada.');
     }
 
     if (usuario.status !== 'ativo') {

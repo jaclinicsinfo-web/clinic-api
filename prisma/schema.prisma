@@ -37,9 +37,12 @@ model Clinica {
   uf           String?
   logoMime     String?
   logoBytes    Bytes?
-  planoId      String   @db.Uuid
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  planoId          String   @db.Uuid
+  status           String   @default("ativa")
+  valorMensal      Decimal  @default(0) @db.Decimal(12, 2)
+  situacaoCobranca String   @default("pendente")
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
 
   plano               Plano                    @relation(fields: [planoId], references: [id])
   unidades            Unidade[]
