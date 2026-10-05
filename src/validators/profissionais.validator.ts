@@ -36,10 +36,6 @@ export const profissionalBodySchema = z
       .string()
       .transform(apenasDigitos)
       .refine(telefoneValido, 'Telefone inválido.'),
-    fotoUrl: textoOpcional.refine(
-      (valor) => valor === null || /^https?:\/\//i.test(valor),
-      'Informe uma URL válida para a foto.',
-    ),
     especialidades: z
       .array(z.enum(ESPECIALIDADES, { errorMap: () => ({ message: 'Especialidade inválida.' }) }))
       .min(1, 'Selecione ao menos uma especialidade.'),

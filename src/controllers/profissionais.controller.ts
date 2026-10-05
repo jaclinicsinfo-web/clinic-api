@@ -78,7 +78,7 @@ async function paraDados(
     rg: dados.rg,
     email: dados.email,
     telefone: dados.telefone,
-    fotoUrl: dados.fotoUrl,
+    fotoUrl: null,
     especialidades: dados.especialidades,
     conselho: dados.conselho,
     registroConselho: dados.registroConselho,

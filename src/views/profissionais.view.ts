@@ -14,7 +14,6 @@ export function profissionalCompleto(profissional: ProfissionalCompleto) {
     nome: profissional.nome,
     cpf: profissional.cpf,
     rg: profissional.rg,
-    fotoUrl: profissional.fotoUrl,
     email: profissional.email,
     telefone: profissional.telefone,
     especialidades: profissional.especialidades,
