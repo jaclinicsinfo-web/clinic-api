@@ -98,12 +98,13 @@ model Unidade {
 }
 
 model PerfilAcesso {
-  id         String  @id @default(uuid()) @db.Uuid
-  clinicaId  String  @db.Uuid
-  nome       String
-  descricao  String
-  sistema    Boolean @default(false)
-  permissoes Json
+  id          String  @id @default(uuid()) @db.Uuid
+  clinicaId   String  @db.Uuid
+  nome        String
+  descricao   String
+  sistema     Boolean @default(false)
+  isolarDados Boolean @default(false)
+  permissoes  Json
 
   clinica  Clinica   @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   usuarios Usuario[]

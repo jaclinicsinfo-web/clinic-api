@@ -19,10 +19,10 @@ import * as despesaModel from '../models/despesa.model';
 import * as loteModel from '../models/lote-convenio.model';
 import * as comissaoModel from '../models/comissao.model';
 import * as formaModel from '../models/forma-pagamento.model';
-import { buscarPorIdEClinica as buscarPaciente, listarResumoAgenda } from '../models/paciente.model';
+import { buscarPorIdEClinica as buscarPaciente, listarResumoAgenda, visivelParaProfissional } from '../models/paciente.model';
 import { buscarPorIdEClinica as buscarAgendamento } from '../models/agendamento.model';
 import { buscarPorIdEClinica as buscarConvenio, listarAtivosPorClinica as listarConveniosAtivos } from '../models/convenio.model';
-import { exigirUnidade } from '../lib/escopo';
+import { carregarContextoClinico, exigirProfissionalVinculado, exigirUnidade, exigirVisaoDaClinica } from '../lib/escopo';
 import { AppError } from '../lib/erros';
 import { dataCivil, dataDeIso, dinheiro, hojeCivil } from '../lib/datas';
 import {
@@ -52,9 +52,9 @@ import {
 
 const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
-async function carregarCobranca(req: Request) {
+async function carregarCobranca(req: Request, profissionalId?: string | null) {
   const { id } = idParamSchema.parse(req.params);
-  const cobranca = await cobrancaModel.buscarPorIdEClinica(id, req.auth!.clinicaId);
+  const cobranca = await cobrancaModel.buscarPorIdEClinica(id, req.auth!.clinicaId, profissionalId ?? undefined);
   if (!cobranca) throw new AppError(404, 'Cobrança não encontrada.');
   return cobranca;
 }
@@ -73,10 +73,12 @@ async function carregarLote(req: Request) {
   return lote;
 }
 
-async function carregarComissao(req: Request) {
+async function carregarComissao(req: Request, profissionalId?: string | null) {
   const { id } = idParamSchema.parse(req.params);
   const comissao = await comissaoModel.buscarPorIdEClinica(id, req.auth!.clinicaId);
-  if (!comissao) throw new AppError(404, 'Comissão não encontrada.');
+  if (!comissao || (profissionalId && comissao.profissionalId !== profissionalId)) {
+    throw new AppError(404, 'Comissão não encontrada.');
+  }
   return comissao;
 }
 
@@ -184,15 +186,18 @@ function agruparPorDia(
   });
 }
 
-async function montarFluxo(clinicaId: string) {
+async function montarFluxo(clinicaId: string, profissionalId?: string | null) {
   const hoje = hojeCivil();
   const inicioDiario = dataDeIso(adicionarDiasIso(hoje, -29)) as Date;
   const fim = dataDeIso(hoje) as Date;
   const inicioAnual = dataDeIso(`${Number(hoje.slice(0, 4)) - 1}-${hoje.slice(5, 7)}-01`) as Date;
+  const restringir = profissionalId !== undefined;
 
   const [entradas, saidas] = await Promise.all([
-    cobrancaModel.movimentosRecebidos(clinicaId, inicioAnual, fim),
-    despesaModel.listarPagasEntre(clinicaId, inicioAnual, fim),
+    restringir && !profissionalId
+      ? Promise.resolve([])
+      : cobrancaModel.movimentosRecebidos(clinicaId, inicioAnual, fim, profissionalId ?? undefined),
+    restringir ? Promise.resolve([]) : despesaModel.listarPagasEntre(clinicaId, inicioAnual, fim),
   ]);
 
   const saidasNum = saidas.map((item) => ({ valor: Number(item.valor), pagoEm: item.pagoEm, categoria: item.categoria }));
@@ -295,14 +300,16 @@ async function montarFluxo(clinicaId: string) {
 export async function visaoGeral(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
     const hoje = hojeCivil();
+    const profissionalId = profissionalIdEscopo ?? undefined;
     const [cobrancas, despesas, lotes, comissoes, inadimplentes, fluxo] = await Promise.all([
-      cobrancaModel.listarPorClinica(clinicaId),
-      despesaModel.listarPorClinica(clinicaId),
-      loteModel.listarPorClinica(clinicaId),
-      comissaoModel.listarPorClinica(clinicaId),
-      cobrancaModel.listarInadimplentes(clinicaId),
-      montarFluxo(clinicaId),
+      somenteProprios && !profissionalId ? Promise.resolve([]) : cobrancaModel.listarPorClinica(clinicaId, undefined, profissionalId),
+      somenteProprios ? Promise.resolve([]) : despesaModel.listarPorClinica(clinicaId),
+      somenteProprios ? Promise.resolve([]) : loteModel.listarPorClinica(clinicaId),
+      somenteProprios && !profissionalId ? Promise.resolve([]) : comissaoModel.listarPorClinica(clinicaId, profissionalId),
+      somenteProprios && !profissionalId ? Promise.resolve([]) : cobrancaModel.listarInadimplentes(clinicaId, profissionalId),
+      montarFluxo(clinicaId, somenteProprios ? profissionalIdEscopo : undefined),
     ]);
 
     const cobrancasResumo = cobrancas.map(cobrancaResumo);
@@ -321,6 +328,7 @@ export async function visaoGeral(req: Request, res: Response, next: NextFunction
         paciente: { id: item.id, nome: item.nome, telefone: item.telefone },
         valorEmAberto: item.valorEmAberto,
       })),
+      somenteProprios,
     });
   } catch (err) {
     next(err);
@@ -330,11 +338,15 @@ export async function visaoGeral(req: Request, res: Response, next: NextFunction
 export async function listarCobrancas(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
     const query = cobrancaQuerySchema.parse(req.query);
+    const profissionalId = profissionalIdEscopo ?? undefined;
     const [cobrancas, convenios, pacientes, formas] = await Promise.all([
-      cobrancaModel.listarPorClinica(clinicaId, query.pacienteId),
+      somenteProprios && !profissionalId
+        ? Promise.resolve([])
+        : cobrancaModel.listarPorClinica(clinicaId, query.pacienteId, profissionalId),
       listarConveniosAtivos(clinicaId),
-      listarResumoAgenda(clinicaId),
+      listarResumoAgenda(clinicaId, profissionalId),
       formaModel.listarPorClinica(clinicaId),
     ]);
     const lista = cobrancas.map(cobrancaResumo);
@@ -344,6 +356,7 @@ export async function listarCobrancas(req: Request, res: Response, next: NextFun
       convenios,
       pacientes: pacientes.map((item) => ({ id: item.id, nome: item.nome })),
       formasPagamento: formas.filter((item) => item.ativo).map(formaPagamentoResumo),
+      somenteProprios,
     });
   } catch (err) {
     next(err);
@@ -353,11 +366,19 @@ export async function listarCobrancas(req: Request, res: Response, next: NextFun
 export async function criarCobranca(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    exigirProfissionalVinculado(somenteProprios, profissionalIdEscopo);
     const unidadeId = exigirUnidade(req);
     const dados = cobrancaBodySchema.parse(req.body);
 
     const paciente = await buscarPaciente(dados.pacienteId, clinicaId);
     if (!paciente || paciente.status === 'arquivado') {
+      throw new AppError(400, 'Paciente inválido para esta clínica.');
+    }
+    if (
+      profissionalIdEscopo &&
+      !(await visivelParaProfissional(paciente.id, clinicaId, profissionalIdEscopo))
+    ) {
       throw new AppError(400, 'Paciente inválido para esta clínica.');
     }
 
@@ -369,6 +390,9 @@ export async function criarCobranca(req: Request, res: Response, next: NextFunct
     if (agendamentoId) {
       const agendamento = await buscarAgendamento(agendamentoId, clinicaId);
       if (!agendamento || agendamento.pacienteId !== dados.pacienteId) {
+        throw new AppError(400, 'Agendamento inválido para este paciente.');
+      }
+      if (profissionalIdEscopo && agendamento.profissionalId !== profissionalIdEscopo) {
         throw new AppError(400, 'Agendamento inválido para este paciente.');
       }
       const existente = await cobrancaModel.buscarPorAgendamento(agendamentoId, clinicaId);
@@ -417,7 +441,8 @@ export async function criarCobranca(req: Request, res: Response, next: NextFunct
 
 export async function pagarCobranca(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const cobranca = await carregarCobranca(req);
+    const { profissionalIdEscopo } = await carregarContextoClinico(req);
+    const cobranca = await carregarCobranca(req, profissionalIdEscopo);
     const dados = pagamentoBodySchema.parse(req.body);
     const status = statusCobrancaEfetivo(cobranca.status, cobranca.vencimento);
 
@@ -458,7 +483,8 @@ export async function pagarCobranca(req: Request, res: Response, next: NextFunct
 export async function pagarParcelaCobranca(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { numero } = parcelaParamSchema.parse(req.params);
-    const cobranca = await carregarCobranca(req);
+    const { profissionalIdEscopo } = await carregarContextoClinico(req);
+    const cobranca = await carregarCobranca(req, profissionalIdEscopo);
     const dados = pagamentoBodySchema.parse(req.body);
     const parcela = cobranca.parcelas.find((item) => item.numero === numero);
     if (!parcela) throw new AppError(404, 'Parcela não encontrada.');
@@ -479,7 +505,8 @@ export async function pagarParcelaCobranca(req: Request, res: Response, next: Ne
 
 export async function parcelarCobranca(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const cobranca = await carregarCobranca(req);
+    const { profissionalIdEscopo } = await carregarContextoClinico(req);
+    const cobranca = await carregarCobranca(req, profissionalIdEscopo);
     const dados = parcelarBodySchema.parse(req.body);
     if (cobranca.status === 'pago' || cobranca.status === 'cancelado' || cobranca.parcelas.length > 0) {
       throw new AppError(400, 'Esta cobrança não pode ser parcelada.');
@@ -500,7 +527,8 @@ export async function parcelarCobranca(req: Request, res: Response, next: NextFu
 
 export async function cancelarCobranca(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const cobranca = await carregarCobranca(req);
+    const { profissionalIdEscopo } = await carregarContextoClinico(req);
+    const cobranca = await carregarCobranca(req, profissionalIdEscopo);
     if (cobranca.status === 'pago') {
       throw new AppError(400, 'Não é possível cancelar uma cobrança já paga.');
     }
@@ -514,8 +542,9 @@ export async function cancelarCobranca(req: Request, res: Response, next: NextFu
 export async function listarDespesas(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios } = await carregarContextoClinico(req);
     const [despesas, formas] = await Promise.all([
-      despesaModel.listarPorClinica(clinicaId),
+      somenteProprios ? Promise.resolve([]) : despesaModel.listarPorClinica(clinicaId),
       formaModel.listarPorClinica(clinicaId),
     ]);
     const lista = despesas.map(despesaResumo);
@@ -532,6 +561,8 @@ export async function listarDespesas(req: Request, res: Response, next: NextFunc
 
 export async function criarDespesa(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const dados = despesaBodySchema.parse(req.body);
     const despesa = await despesaModel.criar({
       clinicaId: req.auth!.clinicaId,
@@ -553,6 +584,8 @@ export async function criarDespesa(req: Request, res: Response, next: NextFuncti
 
 export async function atualizarDespesa(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const despesa = await carregarDespesa(req);
     if (despesa.status === 'pago') {
       throw new AppError(400, 'Não é possível editar uma despesa já paga.');
@@ -576,6 +609,8 @@ export async function atualizarDespesa(req: Request, res: Response, next: NextFu
 
 export async function pagarDespesa(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const despesa = await carregarDespesa(req);
     if (despesa.status === 'pago') {
       throw new AppError(400, 'Esta despesa já foi paga.');
@@ -596,6 +631,8 @@ export async function pagarDespesa(req: Request, res: Response, next: NextFuncti
 
 export async function removerDespesa(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const despesa = await carregarDespesa(req);
     if (despesa.status === 'pago') {
       throw new AppError(400, 'Não é possível excluir uma despesa já paga.');
@@ -609,7 +646,8 @@ export async function removerDespesa(req: Request, res: Response, next: NextFunc
 
 export async function obterFluxoCaixa(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const fluxo = await montarFluxo(req.auth!.clinicaId);
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    const fluxo = await montarFluxo(req.auth!.clinicaId, somenteProprios ? profissionalIdEscopo : undefined);
     res.json(fluxo);
   } catch (err) {
     next(err);
@@ -619,8 +657,9 @@ export async function obterFluxoCaixa(req: Request, res: Response, next: NextFun
 export async function listarLotes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios } = await carregarContextoClinico(req);
     const [lotes, convenios] = await Promise.all([
-      loteModel.listarPorClinica(clinicaId),
+      somenteProprios ? Promise.resolve([]) : loteModel.listarPorClinica(clinicaId),
       listarConveniosAtivos(clinicaId),
     ]);
     const lista = lotes.map(loteResumo);
@@ -636,6 +675,8 @@ export async function listarLotes(req: Request, res: Response, next: NextFunctio
 
 export async function criarLote(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const clinicaId = req.auth!.clinicaId;
     const dados = loteBodySchema.parse(req.body);
     const convenio = await buscarConvenio(dados.convenioId, clinicaId);
@@ -665,6 +706,8 @@ export async function criarLote(req: Request, res: Response, next: NextFunction)
 
 export async function enviarLote(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const lote = await carregarLote(req);
     if (lote.status !== 'aberto') {
       throw new AppError(400, 'Só é possível enviar um lote em aberto.');
@@ -685,6 +728,8 @@ export async function enviarLote(req: Request, res: Response, next: NextFunction
 
 export async function reconciliarLote(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const lote = await carregarLote(req);
     if (lote.status === 'aberto') {
       throw new AppError(400, 'Envie o lote antes de reconciliar o recebimento.');
@@ -731,8 +776,13 @@ export async function reconciliarLote(req: Request, res: Response, next: NextFun
 
 export async function listarComissoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
     const query = comissaoQuerySchema.parse(req.query);
-    const comissoes = await comissaoModel.listarPorClinica(req.auth!.clinicaId, query.profissionalId);
+    const profissionalId = somenteProprios ? (profissionalIdEscopo ?? undefined) : query.profissionalId;
+    const comissoes =
+      somenteProprios && !profissionalId
+        ? []
+        : await comissaoModel.listarPorClinica(req.auth!.clinicaId, profissionalId);
     const filtradas = query.competencia
       ? comissoes.filter((item) => item.competencia === query.competencia)
       : comissoes;
@@ -779,6 +829,8 @@ async function calcularCompetencia(clinicaId: string, competencia: string) {
 
 export async function calcularComissoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const dados = comissaoCalcularSchema.parse(req.body ?? {});
     const competencia = dados.competencia ?? competenciaAtual();
     await calcularCompetencia(req.auth!.clinicaId, competencia);
@@ -796,7 +848,9 @@ export async function calcularComissoes(req: Request, res: Response, next: NextF
 
 export async function aprovarComissao(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const comissao = await carregarComissao(req);
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
+    const comissao = await carregarComissao(req, profissionalIdEscopo);
     if (comissao.status !== 'prevista') {
       throw new AppError(400, 'Só é possível aprovar comissões previstas.');
     }
@@ -809,7 +863,9 @@ export async function aprovarComissao(req: Request, res: Response, next: NextFun
 
 export async function pagarComissao(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const comissao = await carregarComissao(req);
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
+    const comissao = await carregarComissao(req, profissionalIdEscopo);
     if (comissao.status !== 'aprovada') {
       throw new AppError(400, 'Aprove a comissão antes de registrar o pagamento.');
     }
@@ -837,6 +893,8 @@ export async function pagarComissao(req: Request, res: Response, next: NextFunct
 
 export async function fecharFolha(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const dados = comissaoFecharSchema.parse(req.body);
     await calcularCompetencia(req.auth!.clinicaId, dados.competencia);
     const comissoes = await comissaoModel.aprovarPrevistas(req.auth!.clinicaId, dados.competencia);
@@ -862,6 +920,8 @@ export async function listarFormasPagamento(req: Request, res: Response, next: N
 
 export async function salvarFormasPagamento(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const dados = formasPagamentoBodySchema.parse(req.body);
     const formas = await formaModel.substituir(
       req.auth!.clinicaId,

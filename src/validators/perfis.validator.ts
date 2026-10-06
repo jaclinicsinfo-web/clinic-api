@@ -21,4 +21,5 @@ export const atualizarPermissoesSchema = z.object({
       }),
     )
     .min(1, 'Informe as permissões do perfil.'),
+  isolarDados: z.boolean(),
 });

@@ -30,12 +30,13 @@ export function planoResumo(plano: Plano) {
 }
 
 export function perfilResumo(
-  perfil: { id: string; nome: string; permissoes: unknown },
+  perfil: { id: string; nome: string; permissoes: unknown; isolarDados: boolean },
   codigoPlano: string,
 ) {
   return {
     id: perfil.id,
     nome: perfil.nome,
+    isolarDados: perfil.isolarDados,
     permissoes: permissoesEfetivas(perfil, codigoPlano),
   };
 }

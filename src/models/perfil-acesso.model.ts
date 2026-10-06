@@ -15,6 +15,7 @@ export async function criarPerfisPadrao(
         nome: perfil.nome,
         descricao: perfil.descricao,
         sistema: true,
+        isolarDados: perfil.isolarDados,
         permissoes: perfil.permissoes as unknown as Prisma.InputJsonValue,
       },
     });
@@ -38,13 +39,16 @@ export async function buscarPorIdEClinica(
   return prisma.perfilAcesso.findFirst({ where: { id, clinicaId } });
 }
 
-export async function atualizarPermissoes(
+export async function atualizarAcesso(
   id: string,
   clinicaId: string,
-  permissoes: Prisma.InputJsonValue,
+  dados: { permissoes?: Prisma.InputJsonValue; isolarDados: boolean },
 ): Promise<PerfilAcesso> {
   return prisma.perfilAcesso.update({
     where: { id, clinicaId },
-    data: { permissoes },
+    data: {
+      isolarDados: dados.isolarDados,
+      ...(dados.permissoes ? { permissoes: dados.permissoes } : {}),
+    },
   });
 }

@@ -38,7 +38,7 @@ import { possuiAcessoUnidade } from '../models/usuario.model';
 import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
 import {
   carregarContextoClinico,
-  carregarUsuario,
+  exigirProfissionalVinculado,
   podeRegistrarProntuario,
   podeVerProntuario,
 } from '../lib/escopo';
@@ -173,6 +173,9 @@ export async function listarPacientes(
       listarAtivosPorClinica(clinicaId),
       listarProfissionaisAtivos(clinicaId),
     ]);
+    const profissionaisVisiveis = somenteProprios
+      ? profissionais.filter((item) => item.id === profissionalIdEscopo)
+      : profissionais;
 
     const agendaPorPaciente = await datasPorPacientes(
       clinicaId,
@@ -190,7 +193,7 @@ export async function listarPacientes(
       montarListaPacientes({
         pacientes,
         convenios,
-        profissionais,
+        profissionais: profissionaisVisiveis,
         somenteProprios,
         agendaPorPaciente,
         saldoPorPaciente,
@@ -208,11 +211,15 @@ export async function opcoesPacientes(
 ): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
     const [convenios, profissionais] = await Promise.all([
       listarAtivosPorClinica(clinicaId),
       listarProfissionaisAtivos(clinicaId),
     ]);
-    res.json(montarOpcoesPacientes({ convenios, profissionais }));
+    const visiveis = somenteProprios
+      ? profissionais.filter((item) => item.id === profissionalIdEscopo)
+      : profissionais;
+    res.json(montarOpcoesPacientes({ convenios, profissionais: visiveis }));
   } catch (err) {
     next(err);
   }
@@ -295,14 +302,17 @@ export async function criarPaciente(
     }
 
     const dados = pacienteBodySchema.parse(req.body);
+    const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    exigirProfissionalVinculado(somenteProprios, profissionalIdEscopo);
+    const profissionalPreferidoId = somenteProprios ? profissionalIdEscopo : dados.profissionalPreferidoId;
 
     if (await cpfJaExiste(clinicaId, dados.cpf)) {
       throw new AppError(409, 'Já existe um paciente com este CPF nesta clínica.');
     }
 
-    await validarVinculos(clinicaId, dados.convenioId, dados.profissionalPreferidoId);
+    await validarVinculos(clinicaId, dados.convenioId, profissionalPreferidoId);
 
-    const criado = await criar(paraDados(clinicaId, unidadeId, dados, dados.profissionalPreferidoId));
+    const criado = await criar(paraDados(clinicaId, unidadeId, dados, profissionalPreferidoId));
     res.status(201).json(montarPaciente(criado));
   } catch (err) {
     next(err);

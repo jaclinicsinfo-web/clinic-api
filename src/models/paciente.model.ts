@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma, type ClientePrisma } from '../config/database';
+import { wherePacienteDoProfissional } from '../lib/escopo-dados';
 
 const incluirRelacoes = {
   convenio: { select: { id: true, nome: true, status: true } },
@@ -215,6 +216,14 @@ export async function atualizar(
     },
     include: incluirRelacoes,
   });
+}
+
+export async function visivelParaProfissional(id: string, clinicaId: string, profissionalId: string) {
+  const encontrado = await prisma.paciente.findFirst({
+    where: { id, clinicaId, ...wherePacienteDoProfissional(profissionalId) },
+    select: { id: true },
+  });
+  return Boolean(encontrado);
 }
 
 export async function alterarStatus(

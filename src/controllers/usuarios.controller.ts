@@ -24,6 +24,7 @@ import {
 import { usoDaClinica } from '../models/plano.model';
 import { NOME_PERFIL_ADMINISTRADOR, NOME_PERFIL_GESTOR } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
+import { exigirVisaoDaClinica } from '../lib/escopo';
 import { montarListaUsuarios, montarUsuarioMutacao } from '../views/usuarios.view';
 
 export async function listar(
@@ -45,9 +46,11 @@ export async function listar(
       throw new AppError(401, 'Sessão expirada. Entre novamente.');
     }
 
+    const visiveis = eu.perfil.isolarDados ? usuarios.filter((item) => item.id === eu.id) : usuarios;
+
     res.json(
       montarListaUsuarios({
-        usuarios,
+        usuarios: visiveis,
         perfis,
         unidades,
         plano: eu.clinica.plano,
@@ -65,6 +68,9 @@ export async function criar(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const autor = await buscarPorId(req.auth!.sub);
+    if (!autor) throw new AppError(401, 'Sessão expirada. Entre novamente.');
+    exigirVisaoDaClinica(autor.perfil.isolarDados);
     const clinicaId = req.auth!.clinicaId;
     const dados = criarUsuarioSchema.parse(req.body);
 
@@ -110,6 +116,10 @@ async function mudarStatus(
   res: Response,
   proximoStatus: 'ativo' | 'inativo',
 ): Promise<void> {
+  const autor = await buscarPorId(req.auth!.sub);
+  if (!autor) throw new AppError(401, 'Sessão expirada. Entre novamente.');
+  exigirVisaoDaClinica(autor.perfil.isolarDados);
+
   const { id } = usuarioIdParamSchema.parse(req.params);
   const clinicaId = req.auth!.clinicaId;
 
@@ -152,6 +162,9 @@ export async function atualizarPerfil(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const autor = await buscarPorId(req.auth!.sub);
+    if (!autor) throw new AppError(401, 'Sessão expirada. Entre novamente.');
+    exigirVisaoDaClinica(autor.perfil.isolarDados);
     const { id } = usuarioIdParamSchema.parse(req.params);
     const { perfilId } = alterarPerfilSchema.parse(req.body);
     const clinicaId = req.auth!.clinicaId;

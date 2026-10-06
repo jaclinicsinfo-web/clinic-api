@@ -19,7 +19,7 @@ import { comissaoResumo } from '../views/financeiro.view';
 import { NOME_PERFIL_PROFISSIONAL_SAUDE } from '../lib/perfis-padrao';
 import { AppError } from '../lib/erros';
 import { temAcessoAoModulo } from '../lib/permissoes';
-import { carregarUsuario } from '../lib/escopo';
+import { carregarContextoClinico, carregarUsuario, exigirVisaoDaClinica } from '../lib/escopo';
 import { dataDeIso, dinheiro } from '../lib/datas';
 import { agendamentoResumo } from '../views/agenda.view';
 import {
@@ -50,6 +50,10 @@ async function carregar(req: Request) {
   const { id } = profissionalIdParamSchema.parse(req.params);
   const profissional = await buscarPorIdEClinica(id, req.auth!.clinicaId);
   if (!profissional) {
+    throw new AppError(404, 'Profissional não encontrado.');
+  }
+  const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+  if (somenteProprios && profissional.id !== profissionalIdEscopo) {
     throw new AppError(404, 'Profissional não encontrado.');
   }
   return profissional;
@@ -95,8 +99,9 @@ async function paraDados(
 
 export async function listarProfissionais(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const usuario = await carregarUsuario(req);
-    const profissionais = await listarPorClinica(req.auth!.clinicaId);
+    const { usuario, somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+    const todos = await listarPorClinica(req.auth!.clinicaId);
+    const profissionais = somenteProprios ? todos.filter((item) => item.id === profissionalIdEscopo) : todos;
     res.json(montarListaProfissionais(profissionais, temAcessoAoModulo(usuario, 'financeiro', 'visualizar')));
   } catch (err) {
     next(err);
@@ -106,9 +111,10 @@ export async function listarProfissionais(req: Request, res: Response, next: Nex
 export async function opcoesProfissionais(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const { somenteProprios } = await carregarContextoClinico(req);
     const [procedimentos, usuarios] = await Promise.all([
       listarAtivosPorClinica(clinicaId),
-      listarUsuariosSaude(clinicaId),
+      somenteProprios ? Promise.resolve([]) : listarUsuariosSaude(clinicaId),
     ]);
 
     res.json(
@@ -182,6 +188,8 @@ export async function obterProfissional(req: Request, res: Response, next: NextF
 
 export async function criarProfissional(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const clinicaId = req.auth!.clinicaId;
     const dados = profissionalBodySchema.parse(req.body);
 

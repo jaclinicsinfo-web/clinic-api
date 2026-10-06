@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Request, Response, NextFunction } from 'express';
 import { atualizarPermissoesSchema, perfilIdParamSchema } from '../validators/perfis.validator';
 import {
-  atualizarPermissoes,
+  atualizarAcesso,
   buscarPorIdEClinica,
   listarPorClinica,
 } from '../models/perfil-acesso.model';
@@ -39,15 +39,13 @@ export async function atualizar(
       throw new AppError(404, 'Perfil não encontrado.');
     }
 
-    if (perfil.nome === NOME_PERFIL_ADMINISTRADOR) {
-      throw new AppError(400, 'As permissões do administrador não podem ser alteradas.');
-    }
-
-    const atualizado = await atualizarPermissoes(
-      id,
-      clinicaId,
-      permissoesComoMapa(dados.permissoes) as unknown as Prisma.InputJsonValue,
-    );
+    const administrador = perfil.nome === NOME_PERFIL_ADMINISTRADOR;
+    const atualizado = await atualizarAcesso(id, clinicaId, {
+      isolarDados: dados.isolarDados,
+      ...(administrador
+        ? {}
+        : { permissoes: permissoesComoMapa(dados.permissoes) as unknown as Prisma.InputJsonValue }),
+    });
 
     res.json({ perfil: perfilCompleto(atualizado) });
   } catch (err) {

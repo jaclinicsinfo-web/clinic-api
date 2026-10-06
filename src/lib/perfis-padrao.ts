@@ -65,18 +65,21 @@ function comModulos(
 export interface PerfilPadrao {
   nome: string;
   descricao: string;
+  isolarDados: boolean;
   permissoes: Permissoes;
 }
 
 const administrador: PerfilPadrao = {
   nome: 'Administrador',
   descricao: 'Acesso total ao sistema.',
+  isolarDados: false,
   permissoes: todasTrue(),
 };
 
 const gestor: PerfilPadrao = {
   nome: 'Gestor',
   descricao: 'Gerencia a operação da clínica e o perfil de outros usuários.',
+  isolarDados: false,
   permissoes: comModulos({
     dashboard: acoes(true),
     pacientes: acoes(true, true, true, true),
@@ -97,6 +100,7 @@ const gestor: PerfilPadrao = {
 const recepcao: PerfilPadrao = {
   nome: 'Recepção',
   descricao: 'Atendimento, agendamento e cadastro de pacientes.',
+  isolarDados: false,
   permissoes: comModulos({
     dashboard: acoes(true),
     pacientes: acoes(true, true, true, false),
@@ -110,7 +114,8 @@ const recepcao: PerfilPadrao = {
 
 const profissionalSaude: PerfilPadrao = {
   nome: 'Profissional de saúde',
-  descricao: 'Atendimento clínico e agenda.',
+  descricao: 'Atendimento clínico e agenda. Vê apenas os próprios pacientes, a própria agenda e os próprios lançamentos.',
+  isolarDados: true,
   permissoes: comModulos({
     dashboard: acoes(true),
     pacientes: acoes(true, false, true, false),
@@ -124,6 +129,7 @@ const profissionalSaude: PerfilPadrao = {
 const financeiro: PerfilPadrao = {
   nome: 'Financeiro',
   descricao: 'Gestão financeira e convênios.',
+  isolarDados: false,
   permissoes: comModulos({
     dashboard: acoes(true),
     pacientes: acoes(true, false, false, false),

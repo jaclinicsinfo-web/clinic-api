@@ -10,6 +10,7 @@ export function perfilCompleto(perfil: PerfilAcesso) {
     nome: perfil.nome,
     descricao: perfil.descricao,
     sistema: perfil.sistema,
+    isolarDados: perfil.isolarDados,
     permissoes: montarPermissoesDoPerfil(perfil),
   };
 }

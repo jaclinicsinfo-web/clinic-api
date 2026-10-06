@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { env } from '../config/env';
 import { AppError } from '../lib/erros';
+import { carregarContextoClinico, exigirVisaoDaClinica } from '../lib/escopo';
 import { dataDeIso } from '../lib/datas';
 import { cifrarSegredo, decifrarSegredo, ehValorMascarado } from '../lib/segredo';
 import { garantirPadrao, obterConfiguracao, salvarConfiguracao } from '../models/integracao.model';
@@ -49,6 +50,20 @@ function urlWebhook(req: Request, clinicaId: string): string {
   return `${base.replace(/\/+$/, '')}/api/webhooks/whatsapp/${clinicaId}`;
 }
 
+async function exigirClinica(req: Request) {
+  const { somenteProprios } = await carregarContextoClinico(req);
+  exigirVisaoDaClinica(somenteProprios);
+}
+
+async function escopoEnvios(req: Request) {
+  const { somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
+  return {
+    somenteProprios,
+    profissionalId: somenteProprios ? (profissionalIdEscopo ?? undefined) : undefined,
+    semVinculo: somenteProprios && !profissionalIdEscopo,
+  };
+}
+
 function periodoFiltro(query: { de?: string; ate?: string }) {
   const de = dataDeIso(query.de);
   let ate = dataDeIso(query.ate);
@@ -61,9 +76,18 @@ function periodoFiltro(query: { de?: string; ate?: string }) {
 export async function obterDashboardIntegracoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const clinicaId = req.auth!.clinicaId;
+    const escopo = await escopoEnvios(req);
     await garantirPadrao(clinicaId);
     const query = dashboardQuerySchema.parse(req.query);
-    const filtro = { clinicaId, ...periodoFiltro(query), canal: query.canal, status: query.status, tipo: query.tipo };
+    const filtro = {
+      clinicaId,
+      ...periodoFiltro(query),
+      canal: query.canal,
+      status: query.status,
+      tipo: query.tipo,
+      profissionalId: escopo.profissionalId,
+      vazio: escopo.semVinculo,
+    };
     const [resumo, envios, config] = await Promise.all([
       resumoDashboard(filtro),
       listarEnvios(filtro, 8),
@@ -93,6 +117,7 @@ export async function obterConfiguracaoIntegracoes(req: Request, res: Response, 
 
 export async function atualizarConfiguracaoIntegracoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const clinicaId = req.auth!.clinicaId;
     const dados = configuracaoBodySchema.parse(req.body);
     const atual = await garantirPadrao(clinicaId);
@@ -125,6 +150,7 @@ export async function atualizarConfiguracaoIntegracoes(req: Request, res: Respon
 
 export async function testarWhatsapp(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const clinicaId = req.auth!.clinicaId;
     const { para } = testeWhatsappSchema.parse(req.body);
     const config = await obterConfiguracao(clinicaId);
@@ -178,6 +204,7 @@ export async function obterRegras(req: Request, res: Response, next: NextFunctio
 
 export async function criarRegraLembrete(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const clinicaId = req.auth!.clinicaId;
     const dados = regraBodySchema.parse(req.body);
     await validarTemplatesRegra(clinicaId, dados);
@@ -201,6 +228,7 @@ export async function criarRegraLembrete(req: Request, res: Response, next: Next
 
 export async function atualizarRegraLembrete(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const clinicaId = req.auth!.clinicaId;
     const { id } = idParamSchema.parse(req.params);
     const existente = await buscarRegra(id, clinicaId);
@@ -227,6 +255,7 @@ export async function atualizarRegraLembrete(req: Request, res: Response, next: 
 
 export async function excluirRegraLembrete(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const { id } = idParamSchema.parse(req.params);
     const existente = await buscarRegra(id, req.auth!.clinicaId);
     if (!existente) throw new AppError(404, 'Regra não encontrada.');
@@ -249,6 +278,7 @@ export async function obterTemplates(req: Request, res: Response, next: NextFunc
 
 export async function criarTemplateMensagem(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const dados = templateBodySchema.parse(req.body);
     const criado = await criarTemplate({
       clinicaId: req.auth!.clinicaId,
@@ -270,6 +300,7 @@ export async function criarTemplateMensagem(req: Request, res: Response, next: N
 
 export async function atualizarTemplateMensagem(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const { id } = idParamSchema.parse(req.params);
     const existente = await buscarTemplate(id, req.auth!.clinicaId);
     if (!existente) throw new AppError(404, 'Template não encontrado.');
@@ -294,6 +325,7 @@ export async function atualizarTemplateMensagem(req: Request, res: Response, nex
 
 export async function excluirTemplateMensagem(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    await exigirClinica(req);
     const { id } = idParamSchema.parse(req.params);
     const existente = await buscarTemplate(id, req.auth!.clinicaId);
     if (!existente) throw new AppError(404, 'Template não encontrado.');
@@ -317,6 +349,7 @@ export async function obterCustos(req: Request, res: Response, next: NextFunctio
 
 export async function obterHistoricoEnvios(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const escopo = await escopoEnvios(req);
     const query = enviosQuerySchema.parse(req.query);
     const filtro = {
       clinicaId: req.auth!.clinicaId,
@@ -324,6 +357,8 @@ export async function obterHistoricoEnvios(req: Request, res: Response, next: Ne
       canal: query.canal,
       status: query.status,
       tipo: query.tipo,
+      profissionalId: escopo.profissionalId,
+      vazio: escopo.semVinculo,
     };
     const envios = await listarEnvios(filtro, 300);
     const busca = query.busca?.trim().toLowerCase();
@@ -344,8 +379,11 @@ export async function obterHistoricoEnvios(req: Request, res: Response, next: Ne
 export async function obterEnvio(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = idParamSchema.parse(req.params);
+    const escopo = await escopoEnvios(req);
     const envio = await buscarEnvio(id, req.auth!.clinicaId);
-    if (!envio) throw new AppError(404, 'Envio não encontrado.');
+    if (!envio || escopo.semVinculo || (escopo.profissionalId && envio.agendamento.profissional.id !== escopo.profissionalId)) {
+      throw new AppError(404, 'Envio não encontrado.');
+    }
     res.json({ envio: montarEnvio(envio) });
   } catch (err) {
     next(err);
@@ -354,6 +392,8 @@ export async function obterEnvio(req: Request, res: Response, next: NextFunction
 
 export async function processarIntegracoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { somenteProprios } = await carregarContextoClinico(req);
+    exigirVisaoDaClinica(somenteProprios);
     const processados = await processarFilaEnvios(req.auth!.clinicaId);
     res.json({ ok: true, processados });
   } catch (err) {

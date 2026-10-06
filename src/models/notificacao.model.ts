@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { hojeCivil } from '../lib/datas';
+import { wherePacienteDoProfissional } from '../lib/escopo-dados';
 import { temPermissao } from '../lib/permissoes';
 import { listarAbaixoDoMinimo } from './estoque.model';
 
@@ -17,6 +18,8 @@ const CHAVES_OPERACIONAIS = ['estoque-baixo', 'despesas-vencidas', 'carteirinhas
 export async function coletarAlertas(params: {
   clinicaId: string;
   permissoes: unknown;
+  isolarDados?: boolean;
+  profissionalId?: string | null;
 }): Promise<AlertaOperacional[]> {
   const alertas: AlertaOperacional[] = [];
   const hoje = hojeCivil();
@@ -38,7 +41,7 @@ export async function coletarAlertas(params: {
     }
   }
 
-  if (temPermissao(params.permissoes, 'financeiro', 'visualizar')) {
+  if (temPermissao(params.permissoes, 'financeiro', 'visualizar') && !params.isolarDados) {
     const vencidas = await prisma.despesa.count({
       where: {
         clinicaId: params.clinicaId,
@@ -58,14 +61,16 @@ export async function coletarAlertas(params: {
     }
   }
 
-  if (temPermissao(params.permissoes, 'pacientes', 'visualizar')) {
+  if (temPermissao(params.permissoes, 'pacientes', 'visualizar') && !(params.isolarDados && !params.profissionalId)) {
     const limite = new Date();
     limite.setUTCMonth(limite.getUTCMonth() + 6);
+    const escopoPaciente = params.profissionalId ? wherePacienteDoProfissional(params.profissionalId) : {};
     const carteirinhas = await prisma.paciente.findMany({
       where: {
         clinicaId: params.clinicaId,
         status: 'ativo',
         validadeCarteirinha: { not: null, lte: limite },
+        ...escopoPaciente,
       },
       select: { nome: true },
       take: 4,
@@ -75,6 +80,7 @@ export async function coletarAlertas(params: {
         clinicaId: params.clinicaId,
         status: 'ativo',
         validadeCarteirinha: { not: null, lte: limite },
+        ...escopoPaciente,
       },
     });
     if (total > 0) {
@@ -96,6 +102,8 @@ export async function sincronizarOperacionais(params: {
   clinicaId: string;
   usuarioId: string;
   permissoes: unknown;
+  isolarDados?: boolean;
+  profissionalId?: string | null;
 }) {
   const desejadas = await coletarAlertas(params);
   const chavesAtivas = desejadas.map((item) => item.chave);

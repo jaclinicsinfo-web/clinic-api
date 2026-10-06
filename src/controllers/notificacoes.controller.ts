@@ -6,7 +6,7 @@ import {
   marcarTodasLidas,
   sincronizarOperacionais,
 } from '../models/notificacao.model';
-import { buscarPorId } from '../models/usuario.model';
+import { carregarContextoClinico } from '../lib/escopo';
 import { permissoesEfetivas } from '../lib/permissoes';
 import { AppError } from '../lib/erros';
 import { montarListaNotificacoes, notificacaoResumo } from '../views/notificacoes.view';
@@ -17,15 +17,14 @@ const idParamSchema = z.object({
 
 export async function listarNotificacoes(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const usuario = await buscarPorId(req.auth!.sub);
-    if (!usuario) {
-      throw new AppError(401, 'Sessão expirada. Entre novamente.');
-    }
+    const { usuario, somenteProprios, profissionalIdEscopo } = await carregarContextoClinico(req);
 
     await sincronizarOperacionais({
       clinicaId: usuario.clinicaId,
       usuarioId: usuario.id,
       permissoes: permissoesEfetivas(usuario.perfil, usuario.clinica.plano.codigo),
+      isolarDados: somenteProprios,
+      profissionalId: profissionalIdEscopo,
     });
 
     const notificacoes = await listarDoUsuario(usuario.id, usuario.clinicaId);

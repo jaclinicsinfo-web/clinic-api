@@ -34,17 +34,24 @@ export async function carregarUsuario(req: Request): Promise<UsuarioCompleto> {
   return usuario;
 }
 
+export const MENSAGEM_ESCOPO_PROPRIO = 'Seu perfil visualiza apenas os próprios dados.';
+
+export function exigirVisaoDaClinica(somenteProprios: boolean) {
+  if (somenteProprios) {
+    throw new AppError(403, MENSAGEM_ESCOPO_PROPRIO);
+  }
+}
+
 export async function carregarContextoClinico(req: Request) {
   const usuario = await carregarUsuario(req);
-  const profissional = ehProfissionalSaude(usuario.perfil.nome)
-    ? await buscarPorUsuarioId(usuario.id, usuario.clinicaId)
-    : null;
+  const somenteProprios = usuario.perfil.isolarDados;
+  const profissional = somenteProprios ? await buscarPorUsuarioId(usuario.id, usuario.clinicaId) : null;
 
   return {
     usuario,
     profissional,
-    somenteProprios: ehProfissionalSaude(usuario.perfil.nome),
-    profissionalIdEscopo: ehProfissionalSaude(usuario.perfil.nome) ? (profissional?.id ?? null) : null,
+    somenteProprios,
+    profissionalIdEscopo: somenteProprios ? (profissional?.id ?? null) : null,
   };
 }
 

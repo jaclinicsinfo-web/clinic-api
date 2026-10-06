@@ -29,6 +29,8 @@ export interface FiltroEnvios {
   canal?: string;
   status?: string;
   tipo?: string;
+  profissionalId?: string;
+  vazio?: boolean;
 }
 
 function whereFiltro(filtro: FiltroEnvios): Prisma.EnvioLembreteWhereInput {
@@ -45,6 +47,8 @@ function whereFiltro(filtro: FiltroEnvios): Prisma.EnvioLembreteWhereInput {
           },
         }
       : {}),
+    ...(filtro.profissionalId ? { agendamento: { profissionalId: filtro.profissionalId } } : {}),
+    ...(filtro.vazio ? { id: { in: [] } } : {}),
   };
 }
 

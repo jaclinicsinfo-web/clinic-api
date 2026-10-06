@@ -84,7 +84,7 @@ async function garantirUsuarioDaClinica(usuarioId: string, clinicaId: string) {
 
 async function contextoRh(req: Request) {
   const usuario = await carregarUsuario(req);
-  const gestaoCompleta = ehAdminOuGestor(usuario.perfil.nome);
+  const gestaoCompleta = ehAdminOuGestor(usuario.perfil.nome) && !usuario.perfil.isolarDados;
   return {
     usuario,
     gestaoCompleta,

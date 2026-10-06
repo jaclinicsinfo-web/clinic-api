@@ -12,6 +12,7 @@ import {
   valorAbertoCobranca,
   variacaoPercentual,
 } from '../lib/financeiro';
+import { whereCobrancaDoProfissional } from '../lib/escopo-dados';
 import { coletarAlertas, AlertaOperacional } from './notificacao.model';
 import { movimentosRecebidos } from './cobranca.model';
 
@@ -376,10 +377,11 @@ export async function carregarPainel(params: {
   const fimHoje = dataDeIso(hoje) as Date;
   const limite7 = adicionarDiasIso(hoje, 7);
 
+  const escopoCobranca = profissionalId ? whereCobrancaDoProfissional(profissionalId) : {};
   const [movimentos, cobrancas, despesas, alertas] = await Promise.all([
-    movimentosRecebidos(params.clinicaId, inicioAnual, fimHoje),
+    movimentosRecebidos(params.clinicaId, inicioAnual, fimHoje, profissionalId),
     prisma.cobranca.findMany({
-      where: { clinicaId: params.clinicaId, status: { not: 'cancelado' } },
+      where: { clinicaId: params.clinicaId, status: { not: 'cancelado' }, ...escopoCobranca },
       select: {
         status: true,
         valor: true,
@@ -387,11 +389,18 @@ export async function carregarPainel(params: {
         parcelas: { select: { status: true, valor: true } },
       },
     }),
-    prisma.despesa.findMany({
-      where: { clinicaId: params.clinicaId, status: { not: 'pago' } },
-      select: { status: true, valor: true, vencimento: true },
+    profissionalId
+      ? Promise.resolve([])
+      : prisma.despesa.findMany({
+          where: { clinicaId: params.clinicaId, status: { not: 'pago' } },
+          select: { status: true, valor: true, vencimento: true },
+        }),
+    coletarAlertas({
+      clinicaId: params.clinicaId,
+      permissoes: params.permissoes,
+      isolarDados: Boolean(profissionalId),
+      profissionalId,
     }),
-    coletarAlertas({ clinicaId: params.clinicaId, permissoes: params.permissoes }),
   ]);
 
   const diarioMapa = new Map<string, number>();

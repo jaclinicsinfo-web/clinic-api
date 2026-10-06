@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
 import { transacao } from '../lib/tenant';
 import { dataCivil, dataDeIso, hojeCivil } from '../lib/datas';
+import { whereCobrancaDoProfissional } from '../lib/escopo-dados';
 import { adicionarMesesIso, arredondarDinheiro } from '../lib/financeiro';
 
 const incluir = {
@@ -26,17 +27,33 @@ export interface DadosCobranca {
   observacoes?: string | null;
 }
 
-export async function listarPorClinica(clinicaId: string, pacienteId?: string): Promise<CobrancaCompleta[]> {
+export async function listarPorClinica(
+  clinicaId: string,
+  pacienteId?: string,
+  profissionalId?: string,
+): Promise<CobrancaCompleta[]> {
   return prisma.cobranca.findMany({
-    where: { clinicaId, ...(pacienteId ? { pacienteId } : {}) },
+    where: {
+      clinicaId,
+      ...(pacienteId ? { pacienteId } : {}),
+      ...(profissionalId ? whereCobrancaDoProfissional(profissionalId) : {}),
+    },
     include: incluir,
     orderBy: [{ vencimento: 'desc' }, { criadoEm: 'desc' }],
   });
 }
 
-export async function buscarPorIdEClinica(id: string, clinicaId: string): Promise<CobrancaCompleta | null> {
+export async function buscarPorIdEClinica(
+  id: string,
+  clinicaId: string,
+  profissionalId?: string,
+): Promise<CobrancaCompleta | null> {
   return prisma.cobranca.findFirst({
-    where: { id, clinicaId },
+    where: {
+      id,
+      clinicaId,
+      ...(profissionalId ? whereCobrancaDoProfissional(profissionalId) : {}),
+    },
     include: incluir,
   });
 }
@@ -217,9 +234,13 @@ export async function saldosPorPaciente(clinicaId: string, pacienteIds: string[]
   return mapa;
 }
 
-export async function listarInadimplentes(clinicaId: string) {
+export async function listarInadimplentes(clinicaId: string, profissionalId?: string) {
   const cobrancas = await prisma.cobranca.findMany({
-    where: { clinicaId, status: { in: ['pendente', 'parcelado'] } },
+    where: {
+      clinicaId,
+      status: { in: ['pendente', 'parcelado'] },
+      ...(profissionalId ? whereCobrancaDoProfissional(profissionalId) : {}),
+    },
     include: {
       paciente: { select: { id: true, nome: true, telefone: true } },
       parcelas: { select: { status: true, valor: true, vencimento: true } },
@@ -263,7 +284,8 @@ export async function listarInadimplentes(clinicaId: string) {
   return [...porPaciente.values()].sort((a, b) => b.valorEmAberto - a.valorEmAberto);
 }
 
-export async function movimentosRecebidos(clinicaId: string, inicio: Date, fim: Date) {
+export async function movimentosRecebidos(clinicaId: string, inicio: Date, fim: Date, profissionalId?: string) {
+  const escopo = profissionalId ? whereCobrancaDoProfissional(profissionalId) : {};
   const [simples, parcelas] = await Promise.all([
     prisma.cobranca.findMany({
       where: {
@@ -271,6 +293,7 @@ export async function movimentosRecebidos(clinicaId: string, inicio: Date, fim: 
         status: 'pago',
         parcelas: { none: {} },
         pagoEm: { gte: inicio, lte: fim },
+        ...escopo,
       },
       select: { valor: true, pagoEm: true, convenioId: true },
     }),
@@ -278,7 +301,7 @@ export async function movimentosRecebidos(clinicaId: string, inicio: Date, fim: 
       where: {
         status: 'pago',
         pagoEm: { gte: inicio, lte: fim },
-        cobranca: { clinicaId },
+        cobranca: { clinicaId, ...escopo },
       },
       select: { valor: true, pagoEm: true, cobranca: { select: { convenioId: true } } },
     }),
