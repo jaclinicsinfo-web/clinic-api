@@ -29,6 +29,7 @@ import { assinarToken } from '../lib/jwt';
 import { conferirSenha } from '../lib/password';
 import { enviarEmail, montarEmailRedefinirSenha } from '../lib/email';
 import { env, isDev } from '../config/env';
+import { mensagemTrialEncerrado } from '../lib/assinatura';
 import { AppError } from '../lib/erros';
 import { comTenant, comoSistema } from '../lib/tenant';
 import {
@@ -58,6 +59,11 @@ export async function login(
 
     if (usuario.clinica.status !== 'ativa') {
       throw new AppError(403, 'Esta clínica está desativada.');
+    }
+
+    const trialEncerrado = mensagemTrialEncerrado(usuario.clinica);
+    if (trialEncerrado) {
+      throw new AppError(403, trialEncerrado);
     }
 
     if (usuario.status !== 'ativo') {

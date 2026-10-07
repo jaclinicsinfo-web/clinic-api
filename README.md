@@ -71,11 +71,11 @@ express-rate-limit.
 npm install
 ```
 
-2. **Configurar `.env`** (copie de `.env.example`). No dev local use a **URL externa** do Postgres do Render
-   com `?sslmode=require` e defina a `LANDING_API_KEY`:
+2. **Configurar `.env`** (copie de `.env.example`). No dev local use o Postgres do `docker compose`
+   e defina a `LANDING_API_KEY`:
 
 ```env
-DATABASE_URL="postgresql://USUARIO:SENHA@HOST.ohio-postgres.render.com/BANCO?sslmode=require"
+DATABASE_URL="postgresql://clinic:clinic@127.0.0.1:5433/clinic?sslmode=disable"
 LANDING_API_KEY=troque-esta-chave-da-landing
 ```
 
@@ -94,11 +94,10 @@ npm run dev                # http://localhost:3001/api
 Scripts disponíveis: `dev`, `build`, `start`, `prisma:migrate` (dev), `prisma:deploy` (produção),
 `prisma:generate`.
 
-## Produção (Render)
+## Produção (Dokploy)
 
-Use a **URL interna** do banco + `?sslmode=require` na `DATABASE_URL` e rode as migrações com
-`npm run prisma:deploy` (`prisma migrate deploy`). O `build` roda `prisma generate && tsc`; o `start`
-executa `dist/server.js`.
+Defina `NODE_ENV=production` e a `DATABASE_URL` do Postgres do Dokploy. O `start` sobe `dist/server.js`
+e, nesse modo, aplica `prisma migrate deploy` antes de abrir a porta. O `build` roda `prisma generate && tsc`.
 
 ## Segurança
 

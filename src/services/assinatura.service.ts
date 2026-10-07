@@ -1,0 +1,361 @@
+import { env, isDev } from '../config/env';
+import { AppError } from '../lib/erros';
+import {
+  fimDoAcessoGratuito,
+  formatarDataAcesso,
+  gerarSenhaInicial,
+} from '../lib/assinatura';
+import { emailHabilitado, enviarEmail } from '../lib/email';
+import { montarEmailAcesso } from '../lib/email/templates/acesso';
+import { buscarPorCnpj, criarCadastroPosCompra } from '../models/clinica.model';
+import { buscarPorCodigo } from '../models/plano.model';
+import {
+  buscarPedido,
+  concluirPedido,
+  criarPedido,
+  gravarPreferencia,
+  liberarPedido,
+  reservarPedido,
+} from '../models/pedido-assinatura.model';
+import { buscarPorEmail } from '../models/usuario.model';
+import type { InscricaoInput } from '../validators/assinatura.validator';
+
+interface ResultadoAcesso {
+  mensagem: string;
+  email: string;
+  senhaTemporaria?: string;
+}
+
+function exigirEmailConfigurado() {
+  if (!emailHabilitado() && !isDev) {
+    throw new AppError(503, 'O envio de e-mail não está configurado.');
+  }
+}
+
+async function planoComPreco(codigo: string) {
+  const plano = await buscarPorCodigo(codigo);
+  if (!plano || !plano.ativo) throw new AppError(400, 'Plano inválido.');
+  const preco = Number(plano.precoMensal);
+  if (!Number.isFinite(preco) || preco <= 0) {
+    throw new AppError(400, 'Este plano ainda não tem preço de assinatura.');
+  }
+  return { plano, preco };
+}
+
+async function garantirVaga(dados: InscricaoInput) {
+  if (await buscarPorCnpj(dados.clinica.cnpj)) {
+    throw new AppError(409, 'Já existe uma clínica com este CNPJ.');
+  }
+  if (await buscarPorEmail(dados.usuario.email)) {
+    throw new AppError(409, 'Já existe uma conta com este e-mail.');
+  }
+}
+
+async function entregarAcesso(params: {
+  clinicaNome: string;
+  usuarioNome: string;
+  email: string;
+  senha: string;
+  planoNome: string;
+  gratuitoAte: Date | null;
+}): Promise<ResultadoAcesso> {
+  const link = `${env.FRONTEND_URL.replace(/\/+$/, '')}/login`;
+  const mensagemEmail = montarEmailAcesso({
+    nome: params.usuarioNome,
+    empresa: params.clinicaNome,
+    email: params.email,
+    senha: params.senha,
+    link,
+    plano: params.planoNome,
+    gratuitoAte: params.gratuitoAte ? formatarDataAcesso(params.gratuitoAte) : null,
+  });
+
+  if (!emailHabilitado()) {
+    console.info(`[email] Acesso de ${params.email}. Senha temporária: ${params.senha}`);
+    return {
+      mensagem: 'A clínica foi aberta. O e-mail não está configurado neste ambiente, então a senha temporária aparece só aqui.',
+      email: params.email,
+      senhaTemporaria: params.senha,
+    };
+  }
+
+  try {
+    await enviarEmail({
+      para: params.email,
+      assunto: mensagemEmail.assunto,
+      texto: mensagemEmail.texto,
+      html: mensagemEmail.html,
+      remetenteNome: mensagemEmail.remetenteNome,
+      categoria: 'acesso',
+    });
+  } catch (err) {
+    if (!isDev) throw err;
+    console.info(`[email] Falha no envio para ${params.email}. Senha temporária: ${params.senha}`);
+    return {
+      mensagem: 'A clínica foi aberta, mas o e-mail não saiu. Use a senha temporária abaixo.',
+      email: params.email,
+      senhaTemporaria: params.senha,
+    };
+  }
+
+  return {
+    mensagem: 'Enviamos o acesso para o e-mail do administrador.',
+    email: params.email,
+  };
+}
+
+async function abrirClinica(dados: InscricaoInput, senha: string, acesso: {
+  tipoAcesso: 'gratuito' | 'pago';
+  trialExpiraEm: Date | null;
+  valorMensal: number;
+  situacaoCobranca: string;
+}) {
+  const plano = await buscarPorCodigo(dados.plano);
+  if (!plano || !plano.ativo) throw new AppError(400, 'Plano inválido.');
+
+  const { clinica } = await criarCadastroPosCompra({
+    planoId: plano.id,
+    clinica: dados.clinica,
+    unidade: dados.unidade,
+    usuario: { ...dados.usuario, senha },
+    acesso,
+  });
+
+  return { clinica, plano };
+}
+
+export async function iniciarAcessoGratuito(dados: InscricaoInput): Promise<ResultadoAcesso> {
+  exigirEmailConfigurado();
+  const { plano } = await planoComPreco(dados.plano);
+  await garantirVaga(dados);
+
+  const senha = gerarSenhaInicial();
+  const trialExpiraEm = fimDoAcessoGratuito();
+  await abrirClinica(dados, senha, {
+    tipoAcesso: 'gratuito',
+    trialExpiraEm,
+    valorMensal: 0,
+    situacaoCobranca: 'em_dia',
+  });
+
+  return entregarAcesso({
+    clinicaNome: dados.clinica.nomeFantasia,
+    usuarioNome: dados.usuario.nome,
+    email: dados.usuario.email,
+    senha,
+    planoNome: plano.nome,
+    gratuitoAte: trialExpiraEm,
+  });
+}
+
+export async function iniciarCheckout(dados: InscricaoInput) {
+  exigirEmailConfigurado();
+  if (!env.MERCADOPAGO_ACCESS_TOKEN && !isDev) {
+    throw new AppError(503, 'O pagamento ainda não está configurado.');
+  }
+  const { plano, preco } = await planoComPreco(dados.plano);
+  await garantirVaga(dados);
+
+  const pedido = await criarPedido(dados, preco);
+  if (!env.MERCADOPAGO_ACCESS_TOKEN) {
+    if (!isDev) {
+      throw new AppError(503, 'O pagamento ainda não está configurado.');
+    }
+    return {
+      pedidoId: pedido.id,
+      checkoutUrl: `/assinatura/confirmar?pedido=${pedido.id}`,
+    };
+  }
+
+  const frontend = env.FRONTEND_URL.replace(/\/+$/, '');
+  const notificacao = env.API_PUBLIC_URL
+    ? `${env.API_PUBLIC_URL}/api/assinatura/mercadopago`
+    : undefined;
+  const resposta = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.MERCADOPAGO_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      items: [
+        {
+          id: plano.codigo,
+          title: `J.A. Clinics — Plano ${plano.nome}`,
+          quantity: 1,
+          currency_id: 'BRL',
+          unit_price: preco,
+        },
+      ],
+      external_reference: pedido.id,
+      back_urls: {
+        success: `${frontend}/assinatura/retorno?resultado=aprovado&pedido=${pedido.id}`,
+        failure: `${frontend}/assinatura/retorno?resultado=recusado&pedido=${pedido.id}`,
+        pending: `${frontend}/assinatura/retorno?resultado=pendente&pedido=${pedido.id}`,
+      },
+      auto_return: 'approved',
+      notification_url: notificacao,
+    }),
+  });
+
+  const corpo = (await resposta.json().catch(() => null)) as {
+    id?: string;
+    init_point?: string;
+    sandbox_init_point?: string;
+    message?: string;
+  } | null;
+
+  if (!resposta.ok || !corpo?.id) {
+    throw new AppError(502, 'Não foi possível abrir o pagamento.');
+  }
+
+  await gravarPreferencia(pedido.id, corpo.id);
+  const checkoutUrl = env.MERCADOPAGO_ACCESS_TOKEN.startsWith('TEST-')
+    ? corpo.sandbox_init_point
+    : corpo.init_point;
+  if (!checkoutUrl) throw new AppError(502, 'Não foi possível abrir o pagamento.');
+
+  return { pedidoId: pedido.id, checkoutUrl };
+}
+
+function valorConfere(valorPedido: number, valorPago: number) {
+  return Math.abs(valorPedido - valorPago) < 0.02;
+}
+
+async function cumprir(pedidoId: string, pagamentoId: string | null): Promise<ResultadoAcesso & { status: 'pago' }> {
+  const pedido = await buscarPedido(pedidoId);
+  if (!pedido) throw new AppError(404, 'Pedido não encontrado.');
+  if (pedido.status === 'pago') {
+    const dados = pedido.dados as InscricaoInput;
+    return {
+      status: 'pago',
+      mensagem: 'O acesso desta clínica já foi enviado.',
+      email: dados.usuario.email,
+    };
+  }
+
+  const reservou = await reservarPedido(pedidoId);
+  if (!reservou) {
+    const atual = await buscarPedido(pedidoId);
+    if (atual?.status === 'pago') {
+      const dados = atual.dados as InscricaoInput;
+      return {
+        status: 'pago',
+        mensagem: 'O acesso desta clínica já foi enviado.',
+        email: dados.usuario.email,
+      };
+    }
+    throw new AppError(409, 'Este pagamento já está sendo confirmado.');
+  }
+
+  const dados = pedido.dados as InscricaoInput;
+  let clinicaId: string | null = null;
+  try {
+    await garantirVaga(dados);
+    const senha = gerarSenhaInicial();
+    const aberto = await abrirClinica(dados, senha, {
+      tipoAcesso: 'pago',
+      trialExpiraEm: null,
+      valorMensal: Number(pedido.valor),
+      situacaoCobranca: 'em_dia',
+    });
+    clinicaId = aberto.clinica.id;
+    await concluirPedido(pedido.id, aberto.clinica.id, pagamentoId);
+    const entrega = await entregarAcesso({
+      clinicaNome: dados.clinica.nomeFantasia,
+      usuarioNome: dados.usuario.nome,
+      email: dados.usuario.email,
+      senha,
+      planoNome: aberto.plano.nome,
+      gratuitoAte: null,
+    });
+    return { status: 'pago' as const, ...entrega };
+  } catch (err) {
+    if (clinicaId) {
+      await concluirPedido(pedido.id, clinicaId, pagamentoId).catch(() => undefined);
+      return {
+        status: 'pago' as const,
+        mensagem: 'A clínica foi aberta. Se o e-mail não chegou, use Esqueci minha senha com o mesmo e-mail.',
+        email: dados.usuario.email,
+      };
+    }
+    await liberarPedido(pedidoId);
+    throw err;
+  }
+}
+
+interface PagamentoMercadoPago {
+  id?: number | string;
+  status?: string;
+  external_reference?: string;
+  transaction_amount?: number;
+  currency_id?: string;
+}
+
+async function buscarPagamento(id: string): Promise<PagamentoMercadoPago | null> {
+  const resposta = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, {
+    headers: { Authorization: `Bearer ${env.MERCADOPAGO_ACCESS_TOKEN}` },
+  });
+  if (!resposta.ok) return null;
+  return (await resposta.json()) as PagamentoMercadoPago;
+}
+
+async function pagamentoAprovadoDoPedido(pedidoId: string, valor: number) {
+  const url = new URL('https://api.mercadopago.com/v1/payments/search');
+  url.searchParams.set('external_reference', pedidoId);
+  url.searchParams.set('sort', 'date_created');
+  url.searchParams.set('criteria', 'desc');
+  const resposta = await fetch(url, {
+    headers: { Authorization: `Bearer ${env.MERCADOPAGO_ACCESS_TOKEN}` },
+  });
+  if (!resposta.ok) throw new AppError(502, 'Não foi possível consultar o pagamento.');
+  const corpo = (await resposta.json()) as { results?: PagamentoMercadoPago[] };
+  return (
+    corpo.results?.find(
+      (pagamento) =>
+        pagamento.status === 'approved' &&
+        pagamento.currency_id === 'BRL' &&
+        valorConfere(valor, Number(pagamento.transaction_amount)),
+    ) ?? null
+  );
+}
+
+export async function sincronizarPedido(pedidoId: string) {
+  const pedido = await buscarPedido(pedidoId);
+  if (!pedido) throw new AppError(404, 'Pedido não encontrado.');
+  if (pedido.status === 'pago') {
+    const dados = pedido.dados as InscricaoInput;
+    return {
+      status: 'pago' as const,
+      mensagem: 'O acesso desta clínica já foi enviado.',
+      email: dados.usuario.email,
+    };
+  }
+  if (!env.MERCADOPAGO_ACCESS_TOKEN) {
+    return { status: 'pendente' as const, mensagem: 'O pagamento ainda não foi confirmado.', email: '' };
+  }
+
+  const pagamento = await pagamentoAprovadoDoPedido(pedido.id, Number(pedido.valor));
+  if (!pagamento) {
+    return { status: 'pendente' as const, mensagem: 'Ainda não identificamos o pagamento deste pedido.', email: '' };
+  }
+  return cumprir(pedido.id, String(pagamento.id ?? ''));
+}
+
+export async function confirmarPagamentoLocal(pedidoId: string) {
+  if (!isDev || env.MERCADOPAGO_ACCESS_TOKEN) {
+    throw new AppError(404, 'Recurso não encontrado.');
+  }
+  return cumprir(pedidoId, null);
+}
+
+export async function processarAvisoMercadoPago(pagamentoId: string) {
+  if (!env.MERCADOPAGO_ACCESS_TOKEN || !pagamentoId) return;
+  const pagamento = await buscarPagamento(pagamentoId);
+  if (!pagamento || pagamento.status !== 'approved' || pagamento.currency_id !== 'BRL') return;
+  const pedidoId = pagamento.external_reference;
+  if (!pedidoId) return;
+  const pedido = await buscarPedido(pedidoId);
+  if (!pedido || !valorConfere(Number(pedido.valor), Number(pagamento.transaction_amount))) return;
+  await cumprir(pedido.id, String(pagamento.id ?? pagamentoId));
+}

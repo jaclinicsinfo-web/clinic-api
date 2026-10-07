@@ -3,11 +3,12 @@ import { prisma } from '../config/database';
 import { verificarToken } from '../lib/jwt';
 import { AppError } from '../lib/erros';
 import { contextoTenant } from '../lib/tenant';
+import { mensagemTrialEncerrado } from '../lib/assinatura';
 
 async function garantirClinicaAtiva(clinicaId: string): Promise<void> {
   const clinica = await prisma.clinica.findUnique({
     where: { id: clinicaId },
-    select: { status: true },
+    select: { status: true, tipoAcesso: true, trialExpiraEm: true },
   });
 
   if (!clinica) {
@@ -16,6 +17,11 @@ async function garantirClinicaAtiva(clinicaId: string): Promise<void> {
 
   if (clinica.status !== 'ativa') {
     throw new AppError(403, 'Esta clínica está desativada.');
+  }
+
+  const trialEncerrado = mensagemTrialEncerrado(clinica);
+  if (trialEncerrado) {
+    throw new AppError(403, trialEncerrado);
   }
 }
 

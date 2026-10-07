@@ -54,6 +54,10 @@ export async function criarClinica(
     telefone: string;
     email: string;
     planoId: string;
+    tipoAcesso?: 'gratuito' | 'pago';
+    trialExpiraEm?: Date | null;
+    valorMensal?: number;
+    situacaoCobranca?: string;
   },
   tx: ClientePrisma = prisma,
 ): Promise<Clinica> {
@@ -138,6 +142,12 @@ export interface DadosCadastro {
   };
   unidade: { nome: string; cidade: string };
   usuario: { nome: string; email: string; senha: string };
+  acesso?: {
+    tipoAcesso: 'gratuito' | 'pago';
+    trialExpiraEm?: Date | null;
+    valorMensal?: number;
+    situacaoCobranca?: string;
+  };
 }
 
 export interface ResultadoCadastro {
@@ -173,6 +183,10 @@ export async function criarCadastroPosCompra(
         telefone: dados.clinica.telefone,
         email: dados.clinica.email,
         planoId: dados.planoId,
+        tipoAcesso: dados.acesso?.tipoAcesso,
+        trialExpiraEm: dados.acesso?.trialExpiraEm,
+        valorMensal: dados.acesso?.valorMensal,
+        situacaoCobranca: dados.acesso?.situacaoCobranca,
       },
       tx,
     );

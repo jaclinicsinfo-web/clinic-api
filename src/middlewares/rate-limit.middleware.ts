@@ -15,6 +15,11 @@ function criarLimiter(max: number, mensagem: string) {
   });
 }
 
+export const limiteAssinatura = criarLimiter(
+  8,
+  'Muitas tentativas de assinatura. Tente novamente em alguns minutos.',
+);
+
 export const limiteCadastro = criarLimiter(
   5,
   'Muitas tentativas de cadastro. Tente novamente em alguns minutos.',

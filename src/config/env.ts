@@ -29,10 +29,7 @@ function origensCors(): string[] {
     .map(normalizarOrigem)
     .filter(Boolean);
 
-  const extras = [
-    process.env.FRONTEND_URL,
-    'https://clinic-web-app-q4mc.onrender.com',
-  ]
+  const extras = [process.env.FRONTEND_URL]
     .filter((origem): origem is string => Boolean(origem && origem.trim()))
     .map(normalizarOrigem);
 
@@ -53,6 +50,9 @@ export const env = {
   CORS_ORIGIN: origensCors(),
 
   LANDING_API_KEY: requerido('LANDING_API_KEY', process.env.LANDING_API_KEY),
+
+  /** Access token do Mercado Pago. Vazio: o pagamento real fica desligado. */
+  MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || '',
 
   SMTP_HOST: process.env.SMTP_HOST?.trim() || '',
   SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),

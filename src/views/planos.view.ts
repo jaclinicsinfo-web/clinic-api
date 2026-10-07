@@ -7,6 +7,7 @@ export function montarListaPlanos(planos: Plano[]) {
       codigo: plano.codigo,
       nome: plano.nome,
       limiteUsuarios: plano.limiteUsuarios,
+      precoMensal: Number(plano.precoMensal),
       limiteUnidades: limiteUnidadesDoPlano(plano.codigo),
       modulos: [...modulosDoPlano(plano.codigo)],
     })),

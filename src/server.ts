@@ -6,9 +6,8 @@ import { iniciarProcessadorLembretes } from './lib/integracoes/processador';
 import { verificarSmtp } from './lib/email';
 
 async function iniciar(): Promise<void> {
-  const noRender = process.env.RENDER === 'true' || env.NODE_ENV === 'production';
-
-  if (noRender) {
+  // Dokploy sobe o container com NODE_ENV=production. Aí as migrações rodam no DATABASE_URL desse ambiente.
+  if (env.NODE_ENV === 'production') {
     try {
       aplicarMigracoes();
     } catch (err) {
