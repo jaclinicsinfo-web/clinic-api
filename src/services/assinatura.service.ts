@@ -15,6 +15,7 @@ import {
   criarPedido,
   gravarPreferencia,
   liberarPedido,
+  marcarRevisao,
   reservarPedido,
 } from '../models/pedido-assinatura.model';
 import { buscarPorEmail } from '../models/usuario.model';
@@ -32,14 +33,22 @@ function exigirEmailConfigurado() {
   }
 }
 
-async function planoComPreco(codigo: string) {
+function cicloDe(dados: InscricaoInput): 'mensal' | 'anual' {
+  return dados.ciclo === 'anual' ? 'anual' : 'mensal';
+}
+
+async function planoComPreco(codigo: string, ciclo: 'mensal' | 'anual' = 'mensal') {
   const plano = await buscarPorCodigo(codigo);
   if (!plano || !plano.ativo) throw new AppError(400, 'Plano inválido.');
-  const preco = Number(plano.precoMensal);
-  if (!Number.isFinite(preco) || preco <= 0) {
+  const mensal = Number(plano.precoMensal);
+  const anual = Number(plano.precoAnual);
+  if (!Number.isFinite(mensal) || mensal <= 0) {
     throw new AppError(400, 'Este plano ainda não tem preço de assinatura.');
   }
-  return { plano, preco };
+  if (ciclo === 'anual' && (!Number.isFinite(anual) || anual <= 0)) {
+    throw new AppError(400, 'Este plano ainda não tem preço anual.');
+  }
+  return { plano, preco: ciclo === 'anual' ? anual : mensal, ciclo };
 }
 
 async function garantirVaga(dados: InscricaoInput) {
@@ -109,6 +118,7 @@ async function abrirClinica(dados: InscricaoInput, senha: string, acesso: {
   trialExpiraEm: Date | null;
   valorMensal: number;
   situacaoCobranca: string;
+  cicloCobranca?: 'mensal' | 'anual';
 }) {
   const plano = await buscarPorCodigo(dados.plano);
   if (!plano || !plano.ativo) throw new AppError(400, 'Plano inválido.');
@@ -156,10 +166,11 @@ export async function iniciarCheckout(dados: InscricaoInput) {
   if (env.MERCADOPAGO_ACCESS_TOKEN && !env.LANDING_URL) {
     throw new AppError(503, 'A página de retorno do pagamento não está configurada.');
   }
-  const { plano, preco } = await planoComPreco(dados.plano);
+  const ciclo = cicloDe(dados);
+  const { plano, preco } = await planoComPreco(dados.plano, ciclo);
   await garantirVaga(dados);
 
-  const pedido = await criarPedido(dados, preco);
+  const pedido = await criarPedido({ ...dados, ciclo }, preco);
   if (!env.MERCADOPAGO_ACCESS_TOKEN) {
     if (!isDev) {
       throw new AppError(503, 'O pagamento ainda não está configurado.');
@@ -171,9 +182,6 @@ export async function iniciarCheckout(dados: InscricaoInput) {
   }
 
   const landing = env.LANDING_URL;
-  const notificacao = env.API_PUBLIC_URL
-    ? `${env.API_PUBLIC_URL}/api/assinatura/mercadopago`
-    : undefined;
   const resposta = await fetch('https://api.mercadopago.com/checkout/preferences', {
     method: 'POST',
     headers: {
@@ -183,21 +191,41 @@ export async function iniciarCheckout(dados: InscricaoInput) {
     body: JSON.stringify({
       items: [
         {
-          id: plano.codigo,
-          title: `J.A. Clinics — Plano ${plano.nome}`,
+          id: `${plano.codigo}-${ciclo}`,
+          title: `J.A. Clinics — Plano ${plano.nome} (${ciclo === 'anual' ? 'anual' : 'mensal'})`,
+          description:
+            ciclo === 'anual'
+              ? `Assinatura anual do plano ${plano.nome}, cobrada à vista`
+              : `Assinatura mensal do plano ${plano.nome}`,
           quantity: 1,
           currency_id: 'BRL',
-          unit_price: preco,
+          unit_price: Math.round(preco * 100) / 100,
         },
       ],
+      payer: pagador(dados.usuario.nome, dados.usuario.email),
       external_reference: pedido.id,
+      metadata: { pedido_id: pedido.id },
+      statement_descriptor: 'JA CLINICS',
+      payment_methods: {
+        excluded_payment_types: [
+          { id: 'ticket' },
+          { id: 'debit_card' },
+          { id: 'prepaid_card' },
+          { id: 'atm' },
+          { id: 'digital_currency' },
+          { id: 'digital_wallet' },
+          { id: 'voucher_card' },
+        ],
+        installments: 1,
+        default_installments: 1,
+      },
       back_urls: {
         success: `${landing}/assinatura/retorno?resultado=aprovado&pedido=${pedido.id}`,
         failure: `${landing}/assinatura/retorno?resultado=recusado&pedido=${pedido.id}`,
         pending: `${landing}/assinatura/retorno?resultado=pendente&pedido=${pedido.id}`,
       },
       auto_return: 'approved',
-      notification_url: notificacao,
+      notification_url: urlDeAvisoMercadoPago(),
     }),
   });
 
@@ -219,6 +247,13 @@ export async function iniciarCheckout(dados: InscricaoInput) {
   if (!checkoutUrl) throw new AppError(502, 'Não foi possível abrir o pagamento.');
 
   return { pedidoId: pedido.id, checkoutUrl };
+}
+
+function pagador(nome: string, email: string) {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  const name = partes[0] || 'Clinica';
+  const surname = partes.slice(1).join(' ') || name;
+  return { name, surname, email };
 }
 
 function valorConfere(valorPedido: number, valorPago: number) {
@@ -256,11 +291,14 @@ async function cumprir(pedidoId: string, pagamentoId: string | null): Promise<Re
   try {
     await garantirVaga(dados);
     const senha = gerarSenhaInicial();
+    const ciclo = dados.ciclo === 'anual' ? 'anual' : 'mensal';
+    const planoCobrado = await buscarPorCodigo(dados.plano);
     const aberto = await abrirClinica(dados, senha, {
       tipoAcesso: 'pago',
       trialExpiraEm: null,
-      valorMensal: Number(pedido.valor),
+      valorMensal: ciclo === 'anual' ? Number(planoCobrado?.precoMensal ?? 0) : Number(pedido.valor),
       situacaoCobranca: 'em_dia',
+      cicloCobranca: ciclo,
     });
     clinicaId = aberto.clinica.id;
     await concluirPedido(pedido.id, aberto.clinica.id, pagamentoId);
@@ -269,7 +307,7 @@ async function cumprir(pedidoId: string, pagamentoId: string | null): Promise<Re
       usuarioNome: dados.usuario.nome,
       email: dados.usuario.email,
       senha,
-      planoNome: aberto.plano.nome,
+      planoNome: ciclo === 'anual' ? `${aberto.plano.nome} anual` : aberto.plano.nome,
       gratuitoAte: null,
     });
     return { status: 'pago' as const, ...entrega };
@@ -282,8 +320,24 @@ async function cumprir(pedidoId: string, pagamentoId: string | null): Promise<Re
         email: dados.usuario.email,
       };
     }
-    await liberarPedido(pedidoId);
+    if (err instanceof AppError && err.status === 409) {
+      await marcarRevisao(pedidoId);
+    } else {
+      await liberarPedido(pedidoId);
+    }
     throw err;
+  }
+}
+
+function urlDeAvisoMercadoPago(): string | undefined {
+  if (!env.API_PUBLIC_URL) return undefined;
+  try {
+    const url = new URL(env.API_PUBLIC_URL);
+    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    if (url.protocol !== 'https:' || local) return undefined;
+    return `${env.API_PUBLIC_URL}/api/assinatura/mercadopago`;
+  } catch {
+    return undefined;
   }
 }
 
@@ -342,7 +396,32 @@ export async function sincronizarPedido(pedidoId: string) {
   if (!pagamento) {
     return { status: 'pendente' as const, mensagem: 'Ainda não identificamos o pagamento deste pedido.', email: '' };
   }
-  return cumprir(pedido.id, String(pagamento.id ?? ''));
+  try {
+    return await cumprir(pedido.id, String(pagamento.id ?? ''));
+  } catch (err) {
+    if (!(err instanceof AppError) || err.status !== 409) throw err;
+    const atual = await buscarPedido(pedido.id);
+    const dados = (atual?.dados ?? pedido.dados) as InscricaoInput;
+    if (atual?.status === 'pago') {
+      return {
+        status: 'pago' as const,
+        mensagem: 'O acesso desta clínica já foi enviado.',
+        email: dados.usuario.email,
+      };
+    }
+    if (atual?.status === 'revisao') {
+      return {
+        status: 'revisao' as const,
+        mensagem: err.message,
+        email: dados.usuario.email,
+      };
+    }
+    return {
+      status: 'pendente' as const,
+      mensagem: 'O pagamento está sendo confirmado. Atualize a página em instantes.',
+      email: dados.usuario.email,
+    };
+  }
 }
 
 export async function confirmarPagamentoLocal(pedidoId: string) {

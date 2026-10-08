@@ -13,6 +13,7 @@ model Plano {
   nome           String
   limiteUsuarios Int?
   precoMensal    Decimal  @default(0) @db.Decimal(12, 2)
+  precoAnual     Decimal  @default(0) @db.Decimal(12, 2)
   ativo          Boolean  @default(true)
   criadoEm       DateTime @default(now())
   atualizadoEm   DateTime @updatedAt
@@ -43,6 +44,7 @@ model Clinica {
   valorMensal      Decimal   @default(0) @db.Decimal(12, 2)
   situacaoCobranca String    @default("pendente")
   tipoAcesso       String    @default("pago")
+  cicloCobranca    String    @default("mensal")
   trialExpiraEm    DateTime?
   criadoEm         DateTime  @default(now())
   atualizadoEm     DateTime  @updatedAt

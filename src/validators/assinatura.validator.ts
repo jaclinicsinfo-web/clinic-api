@@ -4,6 +4,7 @@ import { cadastroSchema } from './cadastro.validator';
 
 export const inscricaoSchema = z.object({
   plano: cadastroSchema.shape.plano,
+  ciclo: z.enum(['mensal', 'anual']).optional(),
   clinica: cadastroSchema.shape.clinica,
   unidade: cadastroSchema.shape.unidade,
   usuario: z.object({

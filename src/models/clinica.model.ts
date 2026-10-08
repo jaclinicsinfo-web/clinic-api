@@ -58,6 +58,7 @@ export async function criarClinica(
     trialExpiraEm?: Date | null;
     valorMensal?: number;
     situacaoCobranca?: string;
+    cicloCobranca?: 'mensal' | 'anual';
   },
   tx: ClientePrisma = prisma,
 ): Promise<Clinica> {
@@ -147,6 +148,7 @@ export interface DadosCadastro {
     trialExpiraEm?: Date | null;
     valorMensal?: number;
     situacaoCobranca?: string;
+    cicloCobranca?: 'mensal' | 'anual';
   };
 }
 
@@ -187,6 +189,7 @@ export async function criarCadastroPosCompra(
         trialExpiraEm: dados.acesso?.trialExpiraEm,
         valorMensal: dados.acesso?.valorMensal,
         situacaoCobranca: dados.acesso?.situacaoCobranca,
+        cicloCobranca: dados.acesso?.cicloCobranca,
       },
       tx,
     );

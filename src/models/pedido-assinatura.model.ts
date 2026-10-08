@@ -26,7 +26,7 @@ export async function gravarPreferencia(id: string, preferenciaId: string) {
 
 export async function reservarPedido(id: string) {
   const reservado = await prisma.pedidoAssinatura.updateMany({
-    where: { id, status: 'pendente' },
+    where: { id, status: { in: ['pendente', 'revisao'] } },
     data: { status: 'processando' },
   });
   return reservado.count === 1;
@@ -47,5 +47,12 @@ export async function liberarPedido(id: string) {
   await prisma.pedidoAssinatura.updateMany({
     where: { id, status: 'processando' },
     data: { status: 'pendente' },
+  });
+}
+
+export async function marcarRevisao(id: string) {
+  await prisma.pedidoAssinatura.updateMany({
+    where: { id, status: 'processando' },
+    data: { status: 'revisao' },
   });
 }

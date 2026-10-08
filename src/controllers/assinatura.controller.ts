@@ -50,14 +50,21 @@ export async function confirmarLocal(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function webhookMercadoPago(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function webhookMercadoPago(req: Request, res: Response, _next: NextFunction): Promise<void> {
   try {
+    const corpo = req.body as { type?: string; topic?: string; data?: { id?: string | number } } | undefined;
+    const tipo = String(req.query.type || req.query.topic || corpo?.type || corpo?.topic || '');
+    if (tipo && !tipo.includes('payment')) {
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     const daQuery = req.query['data.id'] ?? req.query.id;
-    const corpo = req.body as { data?: { id?: string | number } } | undefined;
     const id = String(daQuery || corpo?.data?.id || '').trim();
     await comoSistema(() => processarAvisoMercadoPago(id));
     res.status(200).json({ ok: true });
   } catch (err) {
-    next(err);
+    console.error('[mercadopago] aviso não aplicado', err instanceof Error ? err.message : err);
+    res.status(200).json({ ok: true });
   }
 }
