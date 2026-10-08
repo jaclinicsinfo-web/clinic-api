@@ -153,6 +153,9 @@ export async function iniciarCheckout(dados: InscricaoInput) {
   if (!env.MERCADOPAGO_ACCESS_TOKEN && !isDev) {
     throw new AppError(503, 'O pagamento ainda não está configurado.');
   }
+  if (env.MERCADOPAGO_ACCESS_TOKEN && !env.LANDING_URL) {
+    throw new AppError(503, 'A página de retorno do pagamento não está configurada.');
+  }
   const { plano, preco } = await planoComPreco(dados.plano);
   await garantirVaga(dados);
 
@@ -167,7 +170,7 @@ export async function iniciarCheckout(dados: InscricaoInput) {
     };
   }
 
-  const frontend = env.FRONTEND_URL.replace(/\/+$/, '');
+  const landing = env.LANDING_URL;
   const notificacao = env.API_PUBLIC_URL
     ? `${env.API_PUBLIC_URL}/api/assinatura/mercadopago`
     : undefined;
@@ -189,9 +192,9 @@ export async function iniciarCheckout(dados: InscricaoInput) {
       ],
       external_reference: pedido.id,
       back_urls: {
-        success: `${frontend}/assinatura/retorno?resultado=aprovado&pedido=${pedido.id}`,
-        failure: `${frontend}/assinatura/retorno?resultado=recusado&pedido=${pedido.id}`,
-        pending: `${frontend}/assinatura/retorno?resultado=pendente&pedido=${pedido.id}`,
+        success: `${landing}/assinatura/retorno?resultado=aprovado&pedido=${pedido.id}`,
+        failure: `${landing}/assinatura/retorno?resultado=recusado&pedido=${pedido.id}`,
+        pending: `${landing}/assinatura/retorno?resultado=pendente&pedido=${pedido.id}`,
       },
       auto_return: 'approved',
       notification_url: notificacao,

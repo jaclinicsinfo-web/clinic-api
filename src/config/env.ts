@@ -29,7 +29,7 @@ function origensCors(): string[] {
     .map(normalizarOrigem)
     .filter(Boolean);
 
-  const extras = [process.env.FRONTEND_URL]
+  const extras = [process.env.FRONTEND_URL, process.env.LANDING_URL]
     .filter((origem): origem is string => Boolean(origem && origem.trim()))
     .map(normalizarOrigem);
 
@@ -47,6 +47,8 @@ export const env = {
   JWT_EXPIRES_IN_LEMBRAR: process.env.JWT_EXPIRES_IN_LEMBRAR ?? '7d',
 
   FRONTEND_URL: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  /** Site público onde a clínica testa ou paga. O sistema interno continua em FRONTEND_URL. */
+  LANDING_URL: process.env.LANDING_URL?.trim().replace(/\/+$/, '') || '',
   CORS_ORIGIN: origensCors(),
 
   LANDING_API_KEY: requerido('LANDING_API_KEY', process.env.LANDING_API_KEY),
