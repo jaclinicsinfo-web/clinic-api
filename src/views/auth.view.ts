@@ -1,6 +1,7 @@
 import { Plano } from '@prisma/client';
 import { UsuarioCompleto } from '../models/usuario.model';
 import { UsoUsuarios } from '../models/plano.model';
+import { acessoGratuitoAtivo } from '../lib/assinatura';
 import { permissoesEfetivas } from '../lib/permissoes';
 import { limiteUnidadesDoPlano, modulosDoPlano } from '../lib/modulos-plano';
 
@@ -77,6 +78,7 @@ export function montarSessao(params: {
     perfil: perfilResumo(usuario.perfil, usuario.clinica.plano.codigo),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
+    acessoGratuito: acessoGratuitoAtivo(usuario.clinica),
   };
 }
 
@@ -97,6 +99,7 @@ export function montarMe(params: {
     perfil: perfilResumo(usuario.perfil, usuario.clinica.plano.codigo),
     plano: planoResumo(usuario.clinica.plano),
     usoUsuarios: { usados: uso.usados, limite: uso.limite },
+    acessoGratuito: acessoGratuitoAtivo(usuario.clinica),
   };
 }
 
