@@ -9,6 +9,7 @@ export interface DadosEmailAcesso {
   link: string;
   plano: string;
   gratuitoAte?: string | null;
+  manual?: string | null;
 }
 
 export function montarEmailAcesso(dados: DadosEmailAcesso) {
@@ -18,6 +19,7 @@ export function montarEmailAcesso(dados: DadosEmailAcesso) {
     ? `Seu acesso gratuito ao plano ${dados.plano} vale até ${dados.gratuitoAte}.`
     : `Sua assinatura do plano ${dados.plano} já está ativa.`;
 
+  const manual = dados.gratuitoAte ? dados.manual?.trim() : '';
   const bloco: BlocoEmail = {
     marca: sistema,
     organizacao: dados.empresa,
@@ -27,11 +29,13 @@ export function montarEmailAcesso(dados: DadosEmailAcesso) {
       `Olá, ${nome}.`,
       `A clínica ${dados.empresa} já pode entrar no ${sistema}. ${gratuito}`,
       `Entre com o e-mail ${dados.email} e a senha temporária ${dados.senha}. Troque a senha depois do primeiro acesso.`,
+      ...(manual ? ['O passo a passo de cada tela está no manual do usuário.'] : []),
     ],
     botao: {
       rotulo: 'Entrar no sistema',
       url: dados.link,
     },
+    ...(manual ? { linkExtra: { rotulo: 'Abrir o manual', url: manual } } : {}),
     aviso: 'Guarde este e-mail. A senha temporária não aparece em nenhum outro lugar.',
   };
 

@@ -16,6 +16,7 @@ export interface BlocoEmail {
   marca?: string;
   organizacao?: string;
   botao?: { rotulo: string; url: string };
+  linkExtra?: { rotulo: string; url: string };
   aviso?: string;
 }
 
@@ -39,6 +40,9 @@ export function montarHtmlTransacional(bloco: BlocoEmail): string {
   const preheader = escaparHtml(bloco.preheader);
   const titulo = escaparHtml(bloco.titulo);
   const paragrafos = bloco.paragrafos.map((texto) => `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:${COR_TEXTO};">${escaparHtml(texto)}</p>`).join('');
+  const linkExtra = bloco.linkExtra
+    ? `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:${COR_TEXTO};"><a href="${escaparHtml(bloco.linkExtra.url)}" target="_blank" rel="noopener noreferrer" style="color:${COR_BOTAO};font-weight:600;">${escaparHtml(bloco.linkExtra.rotulo)}</a></p>`
+    : '';
   const aviso = bloco.aviso
     ? `<p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:${COR_MUDO};">${escaparHtml(bloco.aviso)}</p>`
     : '';
@@ -81,6 +85,7 @@ export function montarHtmlTransacional(bloco: BlocoEmail): string {
                 <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:600;color:${COR_TEXTO};">${titulo}</h1>
                 ${paragrafos}
                 ${botao}
+                ${linkExtra}
                 ${aviso}
               </td>
             </tr>
@@ -104,6 +109,9 @@ export function montarTextoTransacional(bloco: BlocoEmail): string {
 
   if (bloco.botao) {
     linhas.push('', bloco.botao.rotulo, bloco.botao.url);
+  }
+  if (bloco.linkExtra) {
+    linhas.push('', bloco.linkExtra.rotulo, bloco.linkExtra.url);
   }
   if (bloco.aviso) {
     linhas.push('', bloco.aviso);

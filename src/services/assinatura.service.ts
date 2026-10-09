@@ -77,6 +77,7 @@ async function entregarAcesso(params: {
     link,
     plano: params.planoNome,
     gratuitoAte: params.gratuitoAte ? formatarDataAcesso(params.gratuitoAte) : null,
+    manual: params.gratuitoAte ? env.MANUAL_URL : null,
   });
 
   if (!emailHabilitado()) {

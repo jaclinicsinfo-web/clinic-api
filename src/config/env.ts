@@ -49,6 +49,9 @@ export const env = {
   FRONTEND_URL: process.env.FRONTEND_URL ?? 'http://localhost:3000',
   /** Site público onde a clínica testa ou paga. O sistema interno continua em FRONTEND_URL. */
   LANDING_URL: process.env.LANDING_URL?.trim().replace(/\/+$/, '') || '',
+  /** Manual do usuário. Entra no e-mail do teste grátis. */
+  MANUAL_URL: process.env.MANUAL_URL?.trim().replace(/\/+$/, '')
+    || 'https://clinicapp-manual-tre6pq-8e2016-179-236-238-195.sslip.io',
   CORS_ORIGIN: origensCors(),
 
   LANDING_API_KEY: requerido('LANDING_API_KEY', process.env.LANDING_API_KEY),
