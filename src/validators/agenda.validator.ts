@@ -42,6 +42,12 @@ export const agendamentoBodySchema = z
     tipo: z.enum(TIPO_AGENDAMENTO).optional().default('atendimento'),
     observacoes: textoOpcional,
     status: z.enum(STATUS_AGENDAMENTO).optional().default('agendado'),
+    recorrencia: z
+      .object({
+        intervalo: z.enum(['semanal', 'duas_semanas', 'tres_semanas', 'mensal']),
+        meses: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(6), z.literal(12)]),
+      })
+      .optional(),
   })
   .superRefine((dados, ctx) => {
     if (dados.horaFim <= dados.horaInicio) {

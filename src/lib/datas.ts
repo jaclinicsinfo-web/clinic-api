@@ -3,6 +3,36 @@ export function dataDeIso(valor: string | null | undefined): Date | null {
   return new Date(`${valor}T00:00:00.000Z`);
 }
 
+export type IntervaloRecorrencia = 'semanal' | 'duas_semanas' | 'tres_semanas' | 'mensal';
+
+/** Datas seguintes à inicial, no mesmo horário civil, até o fim do período. */
+export function datasRecorrentes(inicio: Date, intervalo: IntervaloRecorrencia, meses: number): Date[] {
+  const limite = new Date(inicio);
+  limite.setUTCMonth(limite.getUTCMonth() + meses);
+  const datas: Date[] = [];
+  let cursor = new Date(inicio);
+
+  while (datas.length < 60) {
+    cursor = avancarDataRecorrente(cursor, intervalo);
+    if (cursor > limite) break;
+    datas.push(new Date(cursor));
+  }
+  return datas;
+}
+
+function avancarDataRecorrente(data: Date, intervalo: IntervaloRecorrencia): Date {
+  const proxima = new Date(data);
+  if (intervalo === 'mensal') {
+    const dia = proxima.getUTCDate();
+    proxima.setUTCMonth(proxima.getUTCMonth() + 1);
+    if (proxima.getUTCDate() !== dia) proxima.setUTCDate(0);
+    return proxima;
+  }
+  const dias = intervalo === 'semanal' ? 7 : intervalo === 'duas_semanas' ? 14 : 21;
+  proxima.setUTCDate(proxima.getUTCDate() + dias);
+  return proxima;
+}
+
 export function dataCivil(valor: Date | null | undefined): string | null {
   if (!valor) return null;
   return valor.toISOString().slice(0, 10);

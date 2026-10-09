@@ -42,7 +42,7 @@ import { possuiAcessoUnidade } from '../models/usuario.model';
 import { buscarPorId as buscarUnidadePorId } from '../models/unidade.model';
 import { carregarContextoClinico, exigirProfissionalVinculado, exigirUnidade } from '../lib/escopo';
 import { AppError } from '../lib/erros';
-import { dataDeIso, dataCivil, dinheiro, hojeCivil } from '../lib/datas';
+import { dataDeIso, dataCivil, datasRecorrentes, dinheiro, hojeCivil } from '../lib/datas';
 import { profissionalCompleto } from '../views/profissionais.view';
 import { procedimentoResumo } from '../views/procedimentos.view';
 import { garantirDoAgendamento } from '../models/cobranca.model';
@@ -254,13 +254,12 @@ export async function criarAgendamento(req: Request, res: Response, next: NextFu
       profissionalIdEscopo,
     });
 
-    const criado = await criar({
+    const base = {
       clinicaId,
       unidadeId,
       pacienteId: dados.pacienteId,
       profissionalId: dados.profissionalId,
       procedimentoId: dados.procedimentoId,
-      data,
       horaInicio: dados.horaInicio,
       horaFim: dados.horaFim,
       sala: dados.sala,
@@ -271,7 +270,29 @@ export async function criarAgendamento(req: Request, res: Response, next: NextFu
       status: dados.status,
       observacoes: dados.observacoes,
       criadoPorId: req.auth!.sub,
-    });
+    };
+    const criado = await criar({ ...base, data });
+    const pulados: string[] = [];
+    let extras = 0;
+
+    if (dados.recorrencia) {
+      for (const dataSeguinte of datasRecorrentes(data, dados.recorrencia.intervalo, dados.recorrencia.meses)) {
+        const ocupado = await horarioOcupado({
+          clinicaId,
+          profissionalId: dados.profissionalId,
+          data: dataSeguinte,
+          horaInicio: dados.horaInicio,
+          horaFim: dados.horaFim,
+        });
+        if (ocupado) {
+          pulados.push(dataCivil(dataSeguinte) ?? '');
+          continue;
+        }
+        await criar({ ...base, data: dataSeguinte });
+        extras += 1;
+      }
+    }
+
     notificarEventoAgenda({
       agendamentoId: criado.id,
       clinicaId,
@@ -284,7 +305,10 @@ export async function criarAgendamento(req: Request, res: Response, next: NextFu
         evento: 'confirmado',
       });
     }
-    res.status(201).json(montarAgendamento(criado));
+    res.status(201).json({
+      ...montarAgendamento(criado),
+      ...(dados.recorrencia ? { recorrencia: { criados: extras + 1, pulados } } : {}),
+    });
   } catch (err) {
     next(err);
   }
