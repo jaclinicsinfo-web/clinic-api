@@ -1,3 +1,4 @@
+import path from 'path';
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -38,6 +39,10 @@ export function criarApp(): Application {
   app.disable('x-powered-by');
 
   app.use('/api', rotas);
+
+  app.get('/favicon.ico', (_req, res) => {
+    res.sendFile(path.join(__dirname, '../public/favicon.ico'));
+  });
 
   app.use(notFound);
   app.use(tratarErros);
