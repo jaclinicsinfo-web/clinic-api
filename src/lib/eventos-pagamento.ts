@@ -14,7 +14,14 @@ export type TipoEventoPagamento =
   | 'pedido_estornado'
   | 'acesso_enviado'
   | 'acesso_falhou'
-  | 'acesso_reenviado';
+  | 'acesso_reenviado'
+  | 'email_enviado'
+  | 'email_tentativa_falhou'
+  | 'email_desistiu'
+  | 'lembrete_enfileirado'
+  | 'conciliacao_aplicou'
+  | 'pedido_expirado'
+  | 'pedido_revisao_pendente';
 
 export interface EventoPagamento extends Omit<DadosEventoPagamento, 'tipo'> {
   tipo: TipoEventoPagamento;

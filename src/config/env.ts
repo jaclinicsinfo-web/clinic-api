@@ -23,6 +23,23 @@ function dinheiroDaEnv(nome: string, padrao = 0): number {
   return Math.round(valor * 10000) / 10000;
 }
 
+function ligado(nome: string, padrao: boolean): boolean {
+  const bruto = process.env[nome]?.trim().toLowerCase();
+  if (!bruto) return padrao;
+  return !['off', 'false', '0', 'nao', 'não'].includes(bruto);
+}
+
+/** "08-20" → envia das 8h às 20h (horário de São Paulo). */
+function janelaDaEnv(nome: string, padrao: { inicio: number; fim: number }) {
+  const bruto = process.env[nome]?.trim();
+  const partes = bruto?.match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!partes) return padrao;
+  const inicio = Number(partes[1]);
+  const fim = Number(partes[2]);
+  if (inicio < 0 || fim > 24 || inicio >= fim) return padrao;
+  return { inicio, fim };
+}
+
 function origensCors(): string[] {
   const daEnv = (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3002')
     .split(',')
@@ -60,6 +77,13 @@ export const env = {
   MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || '',
   /** Assinatura secreta do webhook (Suas integrações › Webhooks). Preenchida: aviso sem x-signature válido é recusado. */
   MERCADOPAGO_WEBHOOK_SECRET: process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim() || '',
+
+  /** Fila de e-mails, lembretes e conferência com o Mercado Pago. Padrão: ligado só em produção. */
+  TAREFAS_COBRANCA: ligado('TAREFAS_COBRANCA', (process.env.NODE_ENV ?? 'development') === 'production'),
+  /** Horário (São Paulo) em que os lembretes de cobrança podem sair. */
+  LEMBRETES_JANELA: janelaDaEnv('LEMBRETES_JANELA', { inicio: 8, fim: 20 }),
+  /** Cópia dos lembretes de atraso (D+1, D+3, bloqueio) para o e-mail da clínica. */
+  EMAIL_COPIA_CLINICA: ligado('EMAIL_COPIA_CLINICA', true),
 
   SMTP_HOST: process.env.SMTP_HOST?.trim() || '',
   SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),

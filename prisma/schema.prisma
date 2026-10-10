@@ -24,21 +24,21 @@ model Plano {
 }
 
 model Clinica {
-  id           String   @id @default(uuid()) @db.Uuid
-  nomeFantasia String
-  razaoSocial  String
-  cnpj         String   @unique
-  telefone     String
-  email        String
-  cep          String?
-  rua          String?
-  numero       String?
-  complemento  String?
-  bairro       String?
-  cidade       String?
-  uf           String?
-  logoMime     String?
-  logoBytes    Bytes?
+  id               String    @id @default(uuid()) @db.Uuid
+  nomeFantasia     String
+  razaoSocial      String
+  cnpj             String    @unique
+  telefone         String
+  email            String
+  cep              String?
+  rua              String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  cidade           String?
+  uf               String?
+  logoMime         String?
+  logoBytes        Bytes?
   planoId          String    @db.Uuid
   status           String    @default("ativa")
   valorMensal      Decimal   @default(0) @db.Decimal(12, 2)
@@ -50,21 +50,21 @@ model Clinica {
   criadoEm         DateTime  @default(now())
   atualizadoEm     DateTime  @updatedAt
 
-  plano               Plano                    @relation(fields: [planoId], references: [id])
-  unidades            Unidade[]
-  perfisAcesso        PerfilAcesso[]
-  usuarios            Usuario[]
-  convenios           Convenio[]
-  pacientes           Paciente[]
-  procedimentos       Procedimento[]
-  profissionais       Profissional[]
-  agendamentos        Agendamento[]
-  bloqueiosAgenda     BloqueioAgenda[]
-  listaEspera         ListaEsperaItem[]
-  acompanhamentos     AcompanhamentoClinico[]
-  atendimentos        Atendimento[]
-  documentosPaciente  DocumentoPaciente[]
-  logsProntuario      LogAcessoProntuario[]
+  plano                Plano                   @relation(fields: [planoId], references: [id])
+  unidades             Unidade[]
+  perfisAcesso         PerfilAcesso[]
+  usuarios             Usuario[]
+  convenios            Convenio[]
+  pacientes            Paciente[]
+  procedimentos        Procedimento[]
+  profissionais        Profissional[]
+  agendamentos         Agendamento[]
+  bloqueiosAgenda      BloqueioAgenda[]
+  listaEspera          ListaEsperaItem[]
+  acompanhamentos      AcompanhamentoClinico[]
+  atendimentos         Atendimento[]
+  documentosPaciente   DocumentoPaciente[]
+  logsProntuario       LogAcessoProntuario[]
   formasPagamento      FormaPagamento[]
   cobrancas            Cobranca[]
   despesas             Despesa[]
@@ -86,7 +86,7 @@ model Clinica {
 
 model PedidoAssinatura {
   id              String    @id @default(uuid()) @db.Uuid
-  /// pendente | processando | pago | revisao | estornado
+  /// pendente | processando | pago | revisao | estornado | expirado
   status          String    @default("pendente")
   /// nova_clinica (landing) | clinica_existente (teste → pago ou renovação)
   tipo            String    @default("nova_clinica")
@@ -101,6 +101,8 @@ model PedidoAssinatura {
   periodoInicio   DateTime? @db.Timestamptz(3)
   periodoFim      DateTime? @db.Timestamptz(3)
   acessoEnviadoEm DateTime? @db.Timestamptz(3)
+  /// Última conferência com o Mercado Pago (tarefa periódica).
+  conferidoEm     DateTime? @db.Timestamptz(3)
   criadoEm        DateTime  @default(now())
   atualizadoEm    DateTime  @updatedAt
 
@@ -116,11 +118,11 @@ model Unidade {
   cidade    String
   ativo     Boolean @default(true)
 
-  clinica         Clinica          @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  usuarioUnidades UsuarioUnidade[]
-  pacientes       Paciente[]
-  agendamentos    Agendamento[]
-  listaEspera     ListaEsperaItem[]
+  clinica              Clinica               @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  usuarioUnidades      UsuarioUnidade[]
+  pacientes            Paciente[]
+  agendamentos         Agendamento[]
+  listaEspera          ListaEsperaItem[]
   cobrancas            Cobranca[]
   despesas             Despesa[]
   movimentacoesEstoque MovimentacaoEstoque[]
@@ -156,21 +158,21 @@ model Usuario {
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 
-  clinica             Clinica              @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  perfil              PerfilAcesso         @relation(fields: [perfilId], references: [id])
-  usuarioUnidades     UsuarioUnidade[]
-  profissional        Profissional?
-  agendamentosCriados Agendamento[]        @relation("AgendamentoCriadoPor")
-  atendimentosCriados Atendimento[]        @relation("AtendimentoCriadoPor")
-  documentosEnviados      DocumentoPaciente[]     @relation("DocumentoCriadoPor")
-  logsProntuario          LogAcessoProntuario[]
-  recuperacoesSenha       RecuperacaoSenha[]
-  notificacoes            Notificacao[]
-  movimentacoesEstoque    MovimentacaoEstoque[]
-  registrosPonto          RegistroPonto[] @relation("PontoUsuario")
-  pontosRegistrados       RegistroPonto[] @relation("PontoRegistradoPor")
-  holerites               Holerite[]      @relation("HoleriteUsuario")
-  holeritesEnviados       Holerite[]      @relation("HoleriteCriadoPor")
+  clinica              Clinica               @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  perfil               PerfilAcesso          @relation(fields: [perfilId], references: [id])
+  usuarioUnidades      UsuarioUnidade[]
+  profissional         Profissional?
+  agendamentosCriados  Agendamento[]         @relation("AgendamentoCriadoPor")
+  atendimentosCriados  Atendimento[]         @relation("AtendimentoCriadoPor")
+  documentosEnviados   DocumentoPaciente[]   @relation("DocumentoCriadoPor")
+  logsProntuario       LogAcessoProntuario[]
+  recuperacoesSenha    RecuperacaoSenha[]
+  notificacoes         Notificacao[]
+  movimentacoesEstoque MovimentacaoEstoque[]
+  registrosPonto       RegistroPonto[]       @relation("PontoUsuario")
+  pontosRegistrados    RegistroPonto[]       @relation("PontoRegistradoPor")
+  holerites            Holerite[]            @relation("HoleriteUsuario")
+  holeritesEnviados    Holerite[]            @relation("HoleriteCriadoPor")
 
   @@map("usuarios")
 }
@@ -223,8 +225,8 @@ model Procedimento {
   criadoEm         DateTime @default(now())
   atualizadoEm     DateTime @updatedAt
 
-  clinica         Clinica                     @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  valoresConvenio ConvenioProcedimento[]
+  clinica              Clinica                    @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  valoresConvenio      ConvenioProcedimento[]
   profissionais        ProfissionalProcedimento[]
   agendamentos         Agendamento[]
   listaEspera          ListaEsperaItem[]
@@ -392,15 +394,15 @@ model Agendamento {
   criadoEm        DateTime @default(now())
   atualizadoEm    DateTime @updatedAt
 
-  clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  unidade      Unidade       @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
-  paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
-  profissional Profissional  @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
-  procedimento Procedimento  @relation(fields: [procedimentoId], references: [id], onDelete: Restrict)
-  convenio     Convenio?     @relation(fields: [convenioId], references: [id], onDelete: SetNull)
-  criadoPor    Usuario       @relation("AgendamentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
-  atendimento  Atendimento?
-  cobranca     Cobranca?
+  clinica        Clinica         @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade        Unidade         @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  paciente       Paciente        @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
+  profissional   Profissional    @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  procedimento   Procedimento    @relation(fields: [procedimentoId], references: [id], onDelete: Restrict)
+  convenio       Convenio?       @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  criadoPor      Usuario         @relation("AgendamentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+  atendimento    Atendimento?
+  cobranca       Cobranca?
   enviosLembrete EnvioLembrete[]
 
   @@index([clinicaId, data])
@@ -465,9 +467,9 @@ model AcompanhamentoClinico {
   criadoEm       DateTime  @default(now())
   atualizadoEm   DateTime  @updatedAt
 
-  clinica      Clinica      @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  paciente     Paciente     @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
-  profissional Profissional @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  clinica      Clinica       @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  paciente     Paciente      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  profissional Profissional  @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
   atendimentos Atendimento[]
 
   @@index([clinicaId, pacienteId])
@@ -494,12 +496,12 @@ model Atendimento {
   criadoPorId            String    @db.Uuid
   criadoEm               DateTime  @default(now())
 
-  clinica        Clinica                 @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  agendamento    Agendamento?            @relation(fields: [agendamentoId], references: [id], onDelete: SetNull)
-  acompanhamento AcompanhamentoClinico?  @relation(fields: [acompanhamentoId], references: [id], onDelete: SetNull)
-  paciente       Paciente                @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
-  profissional   Profissional            @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
-  criadoPor      Usuario                 @relation("AtendimentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+  clinica        Clinica                @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  agendamento    Agendamento?           @relation(fields: [agendamentoId], references: [id], onDelete: SetNull)
+  acompanhamento AcompanhamentoClinico? @relation(fields: [acompanhamentoId], references: [id], onDelete: SetNull)
+  paciente       Paciente               @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  profissional   Profissional           @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  criadoPor      Usuario                @relation("AtendimentoCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
   anexos         DocumentoPaciente[]
 
   @@index([clinicaId, pacienteId])
@@ -691,20 +693,20 @@ model Comissao {
 }
 
 model ProdutoEstoque {
-  id               String   @id @default(uuid()) @db.Uuid
-  clinicaId        String   @db.Uuid
-  nome             String
-  categoria        String
-  unidadeMedida    String
-  quantidadeAtual  Decimal  @default(0) @db.Decimal(12, 2)
-  estoqueMinimo    Decimal  @db.Decimal(12, 2)
-  custoUnitario    Decimal  @db.Decimal(12, 2)
-  fornecedor       String
-  ativo            Boolean  @default(true)
-  criadoEm         DateTime @default(now())
-  atualizadoEm     DateTime @updatedAt
+  id              String   @id @default(uuid()) @db.Uuid
+  clinicaId       String   @db.Uuid
+  nome            String
+  categoria       String
+  unidadeMedida   String
+  quantidadeAtual Decimal  @default(0) @db.Decimal(12, 2)
+  estoqueMinimo   Decimal  @db.Decimal(12, 2)
+  custoUnitario   Decimal  @db.Decimal(12, 2)
+  fornecedor      String
+  ativo           Boolean  @default(true)
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
 
-  clinica       Clinica                 @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  clinica       Clinica               @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   movimentacoes MovimentacaoEstoque[]
 
   @@unique([clinicaId, nome])
@@ -725,11 +727,11 @@ model MovimentacaoEstoque {
   data           DateTime @db.Date
   criadoEm       DateTime @default(now())
 
-  clinica      Clinica         @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  unidade      Unidade         @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
-  produto      ProdutoEstoque  @relation(fields: [produtoId], references: [id], onDelete: Restrict)
-  procedimento Procedimento?   @relation(fields: [procedimentoId], references: [id], onDelete: SetNull)
-  usuario      Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  clinica      Clinica        @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  unidade      Unidade        @relation(fields: [unidadeId], references: [id], onDelete: Restrict)
+  produto      ProdutoEstoque @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  procedimento Procedimento?  @relation(fields: [procedimentoId], references: [id], onDelete: SetNull)
+  usuario      Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
 
   @@index([clinicaId, data])
   @@index([produtoId])
@@ -772,19 +774,19 @@ model Notificacao {
 }
 
 model RegistroPonto {
-  id               String    @id @default(uuid()) @db.Uuid
-  clinicaId        String    @db.Uuid
-  usuarioId        String    @db.Uuid
-  data             DateTime  @db.Date
+  id               String   @id @default(uuid()) @db.Uuid
+  clinicaId        String   @db.Uuid
+  usuarioId        String   @db.Uuid
+  data             DateTime @db.Date
   entrada          String?
   saidaIntervalo   String?
   retornoIntervalo String?
   saida            String?
   observacao       String?
-  origem           String    @default("manual")
-  registradoPorId  String    @db.Uuid
-  criadoEm         DateTime  @default(now())
-  atualizadoEm     DateTime  @updatedAt
+  origem           String   @default("manual")
+  registradoPorId  String   @db.Uuid
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
 
   clinica       Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
   usuario       Usuario @relation("PontoUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
@@ -832,15 +834,15 @@ model IntegracaoClinica {
   whatsappAmbiente           String  @default("producao")
   whatsappCobrancaModo       String  @default("conta_clinica")
 
-  emailAtivo         Boolean @default(false)
-  smtpHost           String?
-  smtpPort           Int?
-  smtpUsuario        String?
-  smtpSenhaCifrada   String?
-  smtpRemetente      String?
-  smtpRemetenteNome  String?
-  smtpSeguro         String  @default("tls")
-  emailCobrancaModo  String  @default("conta_clinica")
+  emailAtivo        Boolean @default(false)
+  smtpHost          String?
+  smtpPort          Int?
+  smtpUsuario       String?
+  smtpSenhaCifrada  String?
+  smtpRemetente     String?
+  smtpRemetenteNome String?
+  smtpSeguro        String  @default("tls")
+  emailCobrancaModo String  @default("conta_clinica")
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -851,24 +853,24 @@ model IntegracaoClinica {
 }
 
 model RegraLembrete {
-  id                   String  @id @default(uuid()) @db.Uuid
-  clinicaId            String  @db.Uuid
-  nome                 String
-  tipo                 String
-  antecedenciaMinutos  Int?
-  destinatarios        String
-  canais               String[]
-  templateWhatsappId   String? @db.Uuid
-  templateEmailId      String? @db.Uuid
-  ativo                Boolean @default(true)
-  sistema              Boolean @default(false)
-  ordem                Int     @default(0)
-  criadoEm             DateTime @default(now())
-  atualizadoEm         DateTime @updatedAt
+  id                  String   @id @default(uuid()) @db.Uuid
+  clinicaId           String   @db.Uuid
+  nome                String
+  tipo                String
+  antecedenciaMinutos Int?
+  destinatarios       String
+  canais              String[]
+  templateWhatsappId  String?  @db.Uuid
+  templateEmailId     String?  @db.Uuid
+  ativo               Boolean  @default(true)
+  sistema             Boolean  @default(false)
+  ordem               Int      @default(0)
+  criadoEm            DateTime @default(now())
+  atualizadoEm        DateTime @updatedAt
 
-  clinica          Clinica            @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  templateWhatsapp TemplateMensagem?  @relation("RegraTemplateWhatsapp", fields: [templateWhatsappId], references: [id], onDelete: SetNull)
-  templateEmail    TemplateMensagem?  @relation("RegraTemplateEmail", fields: [templateEmailId], references: [id], onDelete: SetNull)
+  clinica          Clinica           @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  templateWhatsapp TemplateMensagem? @relation("RegraTemplateWhatsapp", fields: [templateWhatsappId], references: [id], onDelete: SetNull)
+  templateEmail    TemplateMensagem? @relation("RegraTemplateEmail", fields: [templateEmailId], references: [id], onDelete: SetNull)
   envios           EnvioLembrete[]
 
   @@index([clinicaId, ativo])
@@ -876,39 +878,39 @@ model RegraLembrete {
 }
 
 model TemplateMensagem {
-  id                    String  @id @default(uuid()) @db.Uuid
-  clinicaId             String  @db.Uuid
-  canal                 String
-  tipo                  String
-  nome                  String
-  assunto               String?
-  corpo                 String
-  whatsappNomeTemplate  String?
-  whatsappIdioma        String  @default("pt_BR")
-  whatsappCategoria     String  @default("utility")
-  ativo                 Boolean @default(true)
-  sistema               Boolean @default(false)
-  criadoEm              DateTime @default(now())
-  atualizadoEm          DateTime @updatedAt
+  id                   String   @id @default(uuid()) @db.Uuid
+  clinicaId            String   @db.Uuid
+  canal                String
+  tipo                 String
+  nome                 String
+  assunto              String?
+  corpo                String
+  whatsappNomeTemplate String?
+  whatsappIdioma       String   @default("pt_BR")
+  whatsappCategoria    String   @default("utility")
+  ativo                Boolean  @default(true)
+  sistema              Boolean  @default(false)
+  criadoEm             DateTime @default(now())
+  atualizadoEm         DateTime @updatedAt
 
-  clinica            Clinica         @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
-  regrasWhatsapp     RegraLembrete[] @relation("RegraTemplateWhatsapp")
-  regrasEmail        RegraLembrete[] @relation("RegraTemplateEmail")
-  envios             EnvioLembrete[]
+  clinica        Clinica         @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
+  regrasWhatsapp RegraLembrete[] @relation("RegraTemplateWhatsapp")
+  regrasEmail    RegraLembrete[] @relation("RegraTemplateEmail")
+  envios         EnvioLembrete[]
 
   @@index([clinicaId, canal])
   @@map("templates_mensagem")
 }
 
 model CustoEnvio {
-  id        String  @id @default(uuid()) @db.Uuid
-  clinicaId String  @db.Uuid
-  canal     String
-  categoria String
-  valor     Decimal @db.Decimal(12, 4)
-  moeda     String  @default("BRL")
-  ativo     Boolean @default(true)
-  criadoEm  DateTime @default(now())
+  id           String   @id @default(uuid()) @db.Uuid
+  clinicaId    String   @db.Uuid
+  canal        String
+  categoria    String
+  valor        Decimal  @db.Decimal(12, 4)
+  moeda        String   @default("BRL")
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   clinica Clinica @relation(fields: [clinicaId], references: [id], onDelete: Cascade)
@@ -980,4 +982,32 @@ model EventoPagamento {
   @@index([pagamentoId])
   @@index([tipo])
   @@map("eventos_pagamento")
+}
+
+/// Fila de e-mails transacionais com novas tentativas. Conteúdo cifrado e apagado depois do envio.
+model EmailSaida {
+  id                 String    @id @default(uuid()) @db.Uuid
+  /// acesso | acesso_teste | recibo | lembrete_cobranca
+  tipo               String
+  /// Idempotência: a mesma chave nunca é enviada duas vezes.
+  chave              String    @unique
+  para               String
+  assunto            String
+  conteudo           String?
+  /// pendente | enviando | enviado | falhou | cancelado
+  status             String    @default("pendente")
+  tentativas         Int       @default(0)
+  proximaTentativaEm DateTime  @default(now()) @db.Timestamptz(3)
+  ultimoErro         String?
+  clinicaId          String?   @db.Uuid
+  pedidoId           String?   @db.Uuid
+  /// Lembrete: vencimento (ou fim do teste) que gerou o aviso. Se mudar, o lembrete é cancelado.
+  referencia         DateTime? @db.Timestamptz(3)
+  enviadoEm          DateTime? @db.Timestamptz(3)
+  criadoEm           DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm       DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@index([status, proximaTentativaEm])
+  @@index([pedidoId])
+  @@map("emails_saida")
 }

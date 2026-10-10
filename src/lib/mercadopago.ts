@@ -178,6 +178,7 @@ export async function criarPreferencia(params: {
 export async function buscarPagamento(id: string): Promise<PagamentoMercadoPago | null> {
   const resposta = await fetch(`${API}/v1/payments/${encodeURIComponent(id)}`, { headers: cabecalhos() });
   if (resposta.status === 404) return null;
+  if (resposta.status === 429) throw new AppError(502, 'Limite de consultas do Mercado Pago (429).');
   if (!resposta.ok) throw new AppError(502, 'Não foi possível consultar o pagamento.');
   return (await resposta.json()) as PagamentoMercadoPago;
 }
@@ -188,6 +189,7 @@ export async function buscarPagamentosDoPedido(pedidoId: string): Promise<Pagame
   url.searchParams.set('sort', 'date_created');
   url.searchParams.set('criteria', 'desc');
   const resposta = await fetch(url, { headers: cabecalhos() });
+  if (resposta.status === 429) throw new AppError(502, 'Limite de consultas do Mercado Pago (429).');
   if (!resposta.ok) throw new AppError(502, 'Não foi possível consultar o pagamento.');
   const corpo = (await resposta.json()) as { results?: PagamentoMercadoPago[] };
   return corpo.results ?? [];

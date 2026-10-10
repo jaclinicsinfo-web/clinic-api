@@ -14,7 +14,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
-    "test": "node --require ts-node/register --test src/lib/segredo.test.ts src/lib/integracoes/lembretes.test.ts src/lib/assinatura.test.ts src/lib/mercadopago.test.ts"
+    "test": "node --require ts-node/register --test src/lib/segredo.test.ts src/lib/integracoes/lembretes.test.ts src/lib/assinatura.test.ts src/lib/mercadopago.test.ts src/lib/cobranca/cobranca.test.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

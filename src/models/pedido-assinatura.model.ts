@@ -57,7 +57,8 @@ export async function reservarPedido(id: string) {
     where: {
       id,
       OR: [
-        { status: { in: ['pendente', 'revisao'] } },
+        // expirado: checkout abandonado, mas um Pix gerado antes ainda pode ser pago.
+        { status: { in: ['pendente', 'revisao', 'expirado'] } },
         { status: 'processando', atualizadoEm: { lt: abandonado } },
       ],
     },

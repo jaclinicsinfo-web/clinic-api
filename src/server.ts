@@ -4,6 +4,7 @@ import { conectarBanco, desconectarBanco } from './config/database';
 import { aplicarMigracoes } from './lib/migracoes';
 import { iniciarProcessadorLembretes } from './lib/integracoes/processador';
 import { verificarSmtp } from './lib/email';
+import { iniciarTarefasCobranca, pararTarefasCobranca } from './lib/tarefas-cobranca';
 
 async function iniciar(): Promise<void> {
   // Dokploy sobe o container com NODE_ENV=production. Aí as migrações rodam no DATABASE_URL desse ambiente.
@@ -37,12 +38,14 @@ async function iniciar(): Promise<void> {
   });
 
   const processador = iniciarProcessadorLembretes(env.INTEGRACOES_INTERVALO_MS);
+  const tarefasCobranca = iniciarTarefasCobranca();
 
   const encerrar = async (sinal: string): Promise<void> => {
     // eslint-disable-next-line no-console
     console.log(`\nRecebido ${sinal}, encerrando...`);
     server.close(async () => {
       clearInterval(processador);
+      pararTarefasCobranca(tarefasCobranca);
       await desconectarBanco();
       process.exit(0);
     });
