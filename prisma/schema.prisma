@@ -957,3 +957,27 @@ model EnvioLembrete {
   @@index([provedorMessageId])
   @@map("envios_lembrete")
 }
+
+/// Linha do tempo dos pagamentos. Lida pelo painel interno (Logs).
+model EventoPagamento {
+  id          String   @id @default(uuid()) @db.Uuid
+  criadoEm    DateTime @default(now()) @db.Timestamptz(3)
+  tipo        String
+  /// info | aviso | erro
+  nivel       String   @default("info")
+  mensagem    String
+  pedidoId    String?  @db.Uuid
+  clinicaId   String?  @db.Uuid
+  pagamentoId String?
+  /// pix | cartao_credito | outro
+  meio        String?
+  status      String?
+  valor       Decimal? @db.Decimal(12, 2)
+  detalhes    Json?
+
+  @@index([criadoEm(sort: Desc)])
+  @@index([pedidoId])
+  @@index([pagamentoId])
+  @@index([tipo])
+  @@map("eventos_pagamento")
+}

@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { env, isDev } from '../config/env';
 import { AppError } from '../lib/erros';
 import { verificarToken, verificarTokenPagamento } from '../lib/jwt';
+import { mensagemDeErro, registrarEvento } from '../lib/eventos-pagamento';
 import { assinaturaWebhookValida } from '../lib/mercadopago';
 import { comoSistema } from '../lib/tenant';
 import { montarErro } from '../views/error.view';
@@ -161,14 +162,25 @@ export async function webhookMercadoPago(req: Request, res: Response): Promise<v
   const idDaUrl = typeof daQuery === 'string' ? daQuery.trim() : '';
 
   if (!avisoAutentico(req, idDaUrl)) {
-    // Nunca loga o segredo nem o hash: só o que ajuda a achar a causa.
+    // Nunca registra o segredo nem o hash: só o que ajuda a achar a causa.
     const assinatura = req.get('x-signature') ?? '';
-    const ts = /ts=([^,]+)/.exec(assinatura)?.[1] ?? '-';
-    console.warn(
-      `[mercadopago] aviso recusado: x-signature ${assinatura ? `presente (ts=${ts})` : 'AUSENTE'}, ` +
-        `x-request-id ${req.get('x-request-id') ? 'presente' : 'ausente'}, data.id=${idDaUrl || '-'}, ` +
-        `query=${Object.keys(req.query).join('&') || '-'}`,
-    );
+    const ts = /ts=([^,]+)/.exec(assinatura)?.[1] ?? null;
+    await registrarEvento({
+      tipo: 'aviso_recusado',
+      nivel: 'erro',
+      pagamentoId: idDaUrl || null,
+      mensagem: assinatura
+        ? 'x-signature não confere com MERCADOPAGO_WEBHOOK_SECRET (assinatura secreta de outra aplicação ou modo?).'
+        : 'Aviso chegou sem x-signature.',
+      detalhes: {
+        assinatura: assinatura ? 'presente' : 'ausente',
+        ts,
+        requestId: req.get('x-request-id') ? 'presente' : 'ausente',
+        query: req.query,
+        corpo: req.body,
+        userAgent: req.get('user-agent') ?? null,
+      },
+    });
     res.status(401).json(montarErro('Assinatura inválida.'));
     return;
   }
@@ -180,12 +192,23 @@ export async function webhookMercadoPago(req: Request, res: Response): Promise<v
   }
 
   const id = String(idDaUrl || corpo?.data?.id || '').trim();
-  console.info(`[mercadopago] aviso recebido: ${tipo || 'sem tipo'} ${id || 'sem id'}`);
+  await registrarEvento({
+    tipo: 'aviso_recebido',
+    nivel: 'info',
+    pagamentoId: id || null,
+    mensagem: `Aviso do Mercado Pago: ${tipo || 'sem tipo'}${corpo?.action ? ` (${corpo.action})` : ''}.`,
+    detalhes: { query: req.query, action: corpo?.action ?? null, assinatura: env.MERCADOPAGO_WEBHOOK_SECRET ? 'conferida' : 'não conferida' },
+  });
   try {
     await comoSistema(() => processarAvisoMercadoPago(id));
     res.status(200).json({ ok: true });
   } catch (err) {
-    console.error('[mercadopago] aviso não aplicado, aguardando reenvio', err instanceof Error ? err.message : err);
+    await registrarEvento({
+      tipo: 'aviso_falhou',
+      nivel: 'erro',
+      pagamentoId: id || null,
+      mensagem: `Aviso não aplicado (o Mercado Pago reenvia em ~15 min): ${mensagemDeErro(err)}`,
+    });
     res.status(500).json(montarErro('Aviso não aplicado.'));
   }
 }

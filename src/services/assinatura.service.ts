@@ -12,6 +12,7 @@ import {
   somarCiclo,
 } from '../lib/assinatura';
 import { emailHabilitado, enviarEmail } from '../lib/email';
+import { meioDoPagamento, mensagemDeErro, registrarEvento } from '../lib/eventos-pagamento';
 import { montarEmailAcesso } from '../lib/email/templates/acesso';
 import {
   buscarPagamento,
@@ -252,6 +253,15 @@ export async function iniciarCheckout(dados: InscricaoInput) {
     retorno: `${env.LANDING_URL}/assinatura/retorno`,
   });
   await gravarPreferencia(pedido.id, preferenciaId);
+  await registrarEvento({
+    tipo: 'checkout_criado',
+    nivel: 'info',
+    pedidoId: pedido.id,
+    valor: preco,
+    status: 'pendente',
+    mensagem: `Clínica nova "${dados.clinica.nomeFantasia}" abriu o pagamento do plano ${plano.nome} (${ciclo}).`,
+    detalhes: { preferenciaId, tipo: 'nova_clinica', plano: plano.codigo, ciclo, email: dados.usuario.email },
+  });
 
   return { pedidoId: pedido.id, checkoutUrl };
 }
@@ -316,6 +326,16 @@ export async function iniciarCheckoutClinica(acesso: AcessoPagamento, escolha: P
     retorno: `${env.FRONTEND_URL.replace(/\/+$/, '')}/assinatura/retorno`,
   });
   await gravarPreferencia(pedido.id, preferenciaId);
+  await registrarEvento({
+    tipo: 'checkout_criado',
+    nivel: 'info',
+    pedidoId: pedido.id,
+    clinicaId: acesso.clinicaId,
+    valor: preco,
+    status: 'pendente',
+    mensagem: `"${usuario.clinica.nomeFantasia}" (${usuario.clinica.tipoAcesso === 'gratuito' ? 'em teste' : 'renovação'}) abriu o pagamento do plano ${plano.nome} (${ciclo}).`,
+    detalhes: { preferenciaId, tipo: 'clinica_existente', plano: plano.codigo, ciclo, usuarioId: usuario.id },
+  });
 
   return { pedidoId: pedido.id, checkoutUrl };
 }
@@ -364,7 +384,13 @@ function conflitoDeCadastro(err: unknown) {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 }
 
-async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): Promise<ResultadoPedido> {
+type OrigemConfirmacao = 'aviso' | 'retorno' | 'local';
+
+async function cumprirNovaClinica(
+  pedido: Pedido,
+  pagamentoId: string | null,
+  origem: OrigemConfirmacao,
+): Promise<ResultadoPedido> {
   const dados = pedido.dados as InscricaoInput;
   const ciclo = cicloDe(pedido.ciclo);
   const senha = gerarSenhaInicial();
@@ -372,6 +398,7 @@ async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): P
   const fim = somarCiclo(inicio, ciclo);
 
   let planoNome: string;
+  let clinicaId: string | null = null;
   try {
     await garantirVaga(dados);
     const plano = await buscarPorCodigo(dados.plano);
@@ -394,19 +421,46 @@ async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): P
         },
       },
       {
-        aoCriar: (tx, clinicaId) =>
-          concluirPedido(pedido.id, { clinicaId, pagamentoId, periodoInicio: inicio, periodoFim: fim }, tx),
+        aoCriar: (tx, idClinica) => {
+          clinicaId = idClinica;
+          return concluirPedido(
+            pedido.id,
+            { clinicaId: idClinica, pagamentoId, periodoInicio: inicio, periodoFim: fim },
+            tx,
+          );
+        },
       },
     );
   } catch (err) {
     if (conflitoDeCadastro(err)) {
-      console.warn(`[assinatura] pedido ${pedido.id} pago, mas CNPJ ou e-mail já existe: em revisão.`);
       await marcarRevisao(pedido.id);
+      await registrarEvento({
+        tipo: 'pedido_revisao',
+        nivel: 'erro',
+        pedidoId: pedido.id,
+        pagamentoId,
+        valor: Number(pedido.valor),
+        status: 'revisao',
+        mensagem: `Pagamento recebido, mas a clínica não abriu: ${mensagemDeErro(err)}`,
+        detalhes: { cnpj: dados.clinica.cnpj, email: dados.usuario.email, origem },
+      });
       return { status: 'revisao', tipo: 'nova_clinica', email: dados.usuario.email, mensagem: MENSAGEM_REVISAO };
     }
     await liberarPedido(pedido.id);
     throw err;
   }
+
+  await registrarEvento({
+    tipo: 'pedido_pago',
+    nivel: 'info',
+    pedidoId: pedido.id,
+    clinicaId,
+    pagamentoId,
+    valor: Number(pedido.valor),
+    status: 'pago',
+    mensagem: `Clínica "${dados.clinica.nomeFantasia}" aberta como paga até ${formatarDataAcesso(fim)} (confirmado pelo ${origem}).`,
+    detalhes: { origem, ciclo, periodoInicio: inicio.toISOString(), periodoFim: fim.toISOString() },
+  });
 
   try {
     const entrega = await entregarAcesso({
@@ -418,11 +472,25 @@ async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): P
       gratuitoAte: null,
     });
     if (!entrega.senhaTemporaria) await marcarAcessoEnviado(pedido.id);
-    console.info(`[assinatura] pedido ${pedido.id} pago: clínica aberta, pago até ${fim.toISOString()}, acesso enviado para ${dados.usuario.email}`);
+    await registrarEvento({
+      tipo: 'acesso_enviado',
+      nivel: entrega.senhaTemporaria ? 'aviso' : 'info',
+      pedidoId: pedido.id,
+      clinicaId,
+      mensagem: entrega.senhaTemporaria
+        ? `SMTP desligado neste ambiente: senha temporária só no log (${dados.usuario.email}).`
+        : `Login e senha temporária enviados para ${dados.usuario.email}.`,
+    });
     return { status: 'pago', tipo: 'nova_clinica', acessoEnviado: !entrega.senhaTemporaria, ...entrega };
   } catch (err) {
     // A clínica já está paga e aberta. O painel mostra o pedido para reenviar o acesso.
-    console.error('[assinatura] acesso não enviado', pedido.id, err instanceof Error ? err.message : err);
+    await registrarEvento({
+      tipo: 'acesso_falhou',
+      nivel: 'erro',
+      pedidoId: pedido.id,
+      clinicaId,
+      mensagem: `E-mail de acesso para ${dados.usuario.email} não saiu: ${mensagemDeErro(err)}. Use Reenviar acesso no painel.`,
+    });
     return {
       status: 'pago',
       tipo: 'nova_clinica',
@@ -433,14 +501,25 @@ async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): P
   }
 }
 
-async function cumprirClinicaExistente(pedido: Pedido, pagamentoId: string | null): Promise<ResultadoPedido> {
+async function cumprirClinicaExistente(
+  pedido: Pedido,
+  pagamentoId: string | null,
+  origem: OrigemConfirmacao,
+): Promise<ResultadoPedido> {
   if (!pedido.clinicaId) {
     await marcarRevisao(pedido.id);
+    await registrarEvento({
+      tipo: 'pedido_revisao',
+      nivel: 'erro',
+      pedidoId: pedido.id,
+      pagamentoId,
+      mensagem: 'Pedido de clínica existente sem clínica vinculada.',
+    });
     return { status: 'revisao', tipo: 'clinica_existente', email: '', mensagem: MENSAGEM_REVISAO };
   }
   const ciclo = cicloDe(pedido.ciclo);
   try {
-    const { fim } = await registrarPagamentoClinica({
+    const { inicio, fim } = await registrarPagamentoClinica({
       pedidoId: pedido.id,
       clinicaId: pedido.clinicaId,
       planoCodigo: pedido.planoCodigo,
@@ -452,7 +531,17 @@ async function cumprirClinicaExistente(pedido: Pedido, pagamentoId: string | nul
         return { inicio, fim: somarCiclo(inicio, ciclo) };
       },
     });
-    console.info(`[assinatura] pedido ${pedido.id} pago: clínica ${pedido.clinicaId} paga até ${fim.toISOString()}`);
+    await registrarEvento({
+      tipo: 'pedido_pago',
+      nivel: 'info',
+      pedidoId: pedido.id,
+      clinicaId: pedido.clinicaId,
+      pagamentoId,
+      valor: Number(pedido.valor),
+      status: 'pago',
+      mensagem: `Clínica paga até ${formatarDataAcesso(fim)}: plano ${pedido.planoCodigo} (${ciclo}), confirmado pelo ${origem}.`,
+      detalhes: { origem, ciclo, periodoInicio: inicio.toISOString(), periodoFim: fim.toISOString() },
+    });
     return {
       status: 'pago',
       tipo: 'clinica_existente',
@@ -466,7 +555,11 @@ async function cumprirClinicaExistente(pedido: Pedido, pagamentoId: string | nul
   }
 }
 
-async function cumprir(pedidoId: string, pagamentoId: string | null): Promise<ResultadoPedido> {
+async function cumprir(
+  pedidoId: string,
+  pagamentoId: string | null,
+  origem: OrigemConfirmacao,
+): Promise<ResultadoPedido> {
   const pedido = await buscarPedido(pedidoId);
   if (!pedido) throw new AppError(404, 'Pedido não encontrado.');
   if (pedido.status === 'pago' || pedido.status === 'estornado') return resultadoDoPedido(pedido);
@@ -478,8 +571,8 @@ async function cumprir(pedidoId: string, pagamentoId: string | null): Promise<Re
   }
 
   return pedido.tipo === 'clinica_existente'
-    ? cumprirClinicaExistente(pedido, pagamentoId)
-    : cumprirNovaClinica(pedido, pagamentoId);
+    ? cumprirClinicaExistente(pedido, pagamentoId, origem)
+    : cumprirNovaClinica(pedido, pagamentoId, origem);
 }
 
 /** Página de retorno: confere no Mercado Pago se o pedido já tem pagamento aprovado. */
@@ -503,9 +596,21 @@ export async function sincronizarPedido(pedidoId: string): Promise<ResultadoPedi
       valorConfere(Number(pedido.valor), Number(item.transaction_amount)),
   );
   if (!pagamento) return pendente;
+  await registrarEvento({
+    tipo: 'pagamento_consultado',
+    nivel: 'info',
+    pedidoId: pedido.id,
+    clinicaId: pedido.clinicaId,
+    pagamentoId: String(pagamento.id ?? ''),
+    meio: meioDoPagamento(pagamento),
+    status: pagamento.status ?? null,
+    valor: Number(pagamento.transaction_amount),
+    mensagem: 'Página de retorno encontrou o pagamento aprovado no Mercado Pago.',
+    detalhes: { origem: 'retorno', parcelas: pagamento.installments, status_detail: pagamento.status_detail },
+  });
 
   try {
-    return await cumprir(pedido.id, String(pagamento.id ?? ''));
+    return await cumprir(pedido.id, String(pagamento.id ?? ''), 'retorno');
   } catch (err) {
     if (!(err instanceof AppError) || err.status !== 409) throw err;
     const atual = await buscarPedido(pedido.id);
@@ -517,7 +622,7 @@ export async function confirmarPagamentoLocal(pedidoId: string) {
   if (!isDev || env.MERCADOPAGO_ACCESS_TOKEN) {
     throw new AppError(404, 'Recurso não encontrado.');
   }
-  return cumprir(pedidoId, null);
+  return cumprir(pedidoId, null, 'local');
 }
 
 // ---------------------------------------------------------------- webhook
@@ -531,39 +636,102 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function processarAvisoMercadoPago(pagamentoId: string): Promise<void> {
   if (!env.MERCADOPAGO_ACCESS_TOKEN || !pagamentoId) return;
   const pagamento = await buscarPagamento(pagamentoId);
-  if (!pagamento) return;
+  if (!pagamento) {
+    await registrarEvento({
+      tipo: 'pagamento_ignorado',
+      nivel: 'aviso',
+      pagamentoId,
+      mensagem: 'O Mercado Pago não encontrou este pagamento (404).',
+    });
+    return;
+  }
 
   const pedidoId = pagamento.external_reference ?? '';
-  console.info(`[mercadopago] pagamento ${pagamento.id ?? pagamentoId}: ${pagamento.status}, pedido ${pedidoId || 'sem referência'}`);
-  if (!UUID.test(pedidoId)) return;
-  const pedido = await buscarPedido(pedidoId);
-  if (!pedido) return;
   const idPagamento = String(pagamento.id ?? pagamentoId);
+  const pedido = UUID.test(pedidoId) ? await buscarPedido(pedidoId) : null;
+  const base = {
+    pedidoId: pedido?.id ?? null,
+    clinicaId: pedido?.clinicaId ?? null,
+    pagamentoId: idPagamento,
+    meio: meioDoPagamento(pagamento),
+    status: pagamento.status ?? null,
+    valor: Number(pagamento.transaction_amount),
+  };
+  await registrarEvento({
+    ...base,
+    tipo: 'pagamento_consultado',
+    nivel: 'info',
+    mensagem: `Mercado Pago: ${descreverPagamento(pagamento)}.`,
+    detalhes: {
+      origem: 'aviso',
+      external_reference: pedidoId || null,
+      status_detail: pagamento.status_detail,
+      metodo: pagamento.payment_method_id,
+      parcelas: pagamento.installments,
+      total_pago: pagamento.transaction_details?.total_paid_amount,
+      aprovado_em: pagamento.date_approved,
+    },
+  });
+
+  const ignorar = (mensagem: string, nivel: 'info' | 'aviso' = 'aviso') =>
+    registrarEvento({ ...base, tipo: 'pagamento_ignorado', nivel, mensagem });
+
+  if (!pedido) {
+    await ignorar(pedidoId ? `Referência ${pedidoId} não é um pedido deste ambiente.` : 'Pagamento sem referência de pedido.');
+    return;
+  }
 
   if (pagamento.status === 'refunded' || pagamento.status === 'charged_back') {
     if (await estornarPedido(pedido.id, idPagamento)) {
-      console.warn(`[mercadopago] pagamento ${idPagamento} ${pagamento.status}; pedido ${pedido.id} estornado.`);
+      await registrarEvento({
+        ...base,
+        tipo: 'pedido_estornado',
+        nivel: 'aviso',
+        mensagem: `${pagamento.status === 'charged_back' ? 'Chargeback' : 'Estorno'}: o vencimento da clínica recuou o período deste pagamento.`,
+      });
     }
     return;
   }
 
-  if (pagamento.status !== 'approved' || pagamento.currency_id !== 'BRL') return;
+  if (pagamento.status !== 'approved') {
+    if (pagamento.status === 'pending' || pagamento.status === 'in_process') {
+      await ignorar(base.meio === 'pix' ? 'Pix gerado, aguardando o pagamento.' : 'Pagamento em análise no Mercado Pago.', 'info');
+    } else {
+      await ignorar(`Pagamento ${pagamento.status}${pagamento.status_detail ? ` (${pagamento.status_detail})` : ''}: nada a fazer.`, 'info');
+    }
+    return;
+  }
+  if (pagamento.currency_id !== 'BRL') {
+    await ignorar(`Moeda ${pagamento.currency_id} não aceita.`);
+    return;
+  }
   if (!valorConfere(Number(pedido.valor), Number(pagamento.transaction_amount))) {
-    console.warn(`[mercadopago] valor do pagamento ${idPagamento} não confere com o pedido ${pedido.id}.`);
+    await ignorar(`Valor pago (${pagamento.transaction_amount}) não confere com o pedido (${Number(pedido.valor)}).`);
     return;
   }
   if (pedido.status === 'pago' && pedido.pagamentoId && pedido.pagamentoId !== idPagamento) {
-    console.warn(`[mercadopago] pagamento ${idPagamento} repetido para o pedido ${pedido.id}, já pago. Revisar estorno.`);
+    await ignorar(`Pedido já pago pelo pagamento ${pedido.pagamentoId}. Este é repetido: avaliar devolução.`);
     return;
   }
 
   try {
-    await cumprir(pedido.id, idPagamento);
+    await cumprir(pedido.id, idPagamento, 'aviso');
   } catch (err) {
     const atual = await buscarPedido(pedido.id);
     if (atual && (atual.status === 'pago' || atual.status === 'revisao' || atual.status === 'estornado')) return;
     throw err;
   }
+}
+
+function descreverPagamento(pagamento: {
+  status?: string;
+  status_detail?: string;
+  payment_method_id?: string;
+  installments?: number;
+}) {
+  const meio = pagamento.payment_method_id === 'pix' ? 'Pix' : pagamento.payment_method_id ?? 'meio desconhecido';
+  const parcelas = pagamento.installments && pagamento.installments > 1 ? ` em ${pagamento.installments}x` : '';
+  return `${pagamento.status ?? 'sem status'}${pagamento.status_detail ? ` (${pagamento.status_detail})` : ''}, ${meio}${parcelas}`;
 }
 
 // ---------------------------------------------------------------- painel interno
@@ -594,5 +762,12 @@ export async function reenviarAcesso(pedidoId: string): Promise<{ mensagem: stri
     gratuitoAte: null,
   });
   await marcarAcessoEnviado(pedido.id);
+  await registrarEvento({
+    tipo: 'acesso_reenviado',
+    nivel: 'info',
+    pedidoId: pedido.id,
+    clinicaId: pedido.clinicaId,
+    mensagem: `Painel reenviou o acesso para ${admin.email} com outra senha temporária.`,
+  });
   return { mensagem: `Acesso reenviado para ${admin.email}.`, email: admin.email };
 }

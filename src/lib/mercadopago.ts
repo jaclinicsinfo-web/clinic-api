@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 
 import { env } from '../config/env';
 import { AppError } from './erros';
+import { registrarEvento } from './eventos-pagamento';
 import type { CicloCobranca } from './assinatura';
 
 const API = 'https://api.mercadopago.com';
@@ -13,6 +14,12 @@ export const PARCELAS_ANUAL = 12;
 export interface PagamentoMercadoPago {
   id?: number | string;
   status?: string;
+  status_detail?: string;
+  payment_method_id?: string;
+  payment_type_id?: string;
+  installments?: number;
+  date_approved?: string;
+  transaction_details?: { total_paid_amount?: number };
   external_reference?: string;
   transaction_amount?: number;
   currency_id?: string;
@@ -141,10 +148,17 @@ export async function criarPreferencia(params: {
     id?: string;
     init_point?: string;
     sandbox_init_point?: string;
+    message?: string;
   } | null;
 
   if (!resposta.ok || !corpo?.id) {
-    console.error('[mercadopago] preferência recusada', resposta.status);
+    await registrarEvento({
+      tipo: 'checkout_recusado',
+      nivel: 'erro',
+      pedidoId: params.pedidoId,
+      valor: params.valor,
+      mensagem: `Mercado Pago recusou a preferência (HTTP ${resposta.status}): ${corpo?.message ?? 'sem detalhe'}.`,
+    });
     throw new AppError(502, 'Não foi possível abrir o pagamento.');
   }
 
@@ -154,9 +168,9 @@ export async function criarPreferencia(params: {
     : corpo.init_point;
   if (!checkoutUrl) throw new AppError(502, 'Não foi possível abrir o pagamento.');
 
-  console.info(
-    `[mercadopago] preferência ${corpo.id} criada: pedido ${params.pedidoId}, ${params.ciclo}, R$ ${params.valor.toFixed(2)}, aviso ${urlDeAviso() ? 'ligado' : 'DESLIGADO (API_PUBLIC_URL sem https)'}`,
-  );
+  if (!urlDeAviso()) {
+    console.warn('[pagamento] API_PUBLIC_URL sem https: o Mercado Pago não vai avisar este pagamento, só a página de retorno confirma.');
+  }
   return { preferenciaId: corpo.id, checkoutUrl };
 }
 
