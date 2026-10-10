@@ -1,0 +1,194 @@
+import { createHmac, timingSafeEqual } from 'crypto';
+
+import { env } from '../config/env';
+import { AppError } from './erros';
+import type { CicloCobranca } from './assinatura';
+
+const API = 'https://api.mercadopago.com';
+/** Link de pagamento velho não deve ser pago semanas depois. Pix já gerado segue o prazo próprio. */
+const VALIDADE_PREFERENCIA_MS = 48 * 60 * 60 * 1000;
+/** Teto de parcelas do anual no cartão. O Mercado Pago mostra as opções de 1x até aqui. */
+export const PARCELAS_ANUAL = 12;
+
+export interface PagamentoMercadoPago {
+  id?: number | string;
+  status?: string;
+  external_reference?: string;
+  transaction_amount?: number;
+  currency_id?: string;
+}
+
+function cabecalhos() {
+  return {
+    Authorization: `Bearer ${env.MERCADOPAGO_ACCESS_TOKEN}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+export function pagador(nome: string, email: string) {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  const name = partes[0] || 'Clinica';
+  const surname = partes.slice(1).join(' ') || name;
+  return { name, surname, email };
+}
+
+/**
+ * Mensal: Pix ou cartão à vista, todo mês.
+ * Anual: Pix à vista, ou cartão parcelado em até 12x pelo Mercado Pago.
+ */
+export function meiosDePagamento(ciclo: CicloCobranca) {
+  return {
+    excluded_payment_types: [
+      { id: 'ticket' },
+      { id: 'debit_card' },
+      { id: 'prepaid_card' },
+      { id: 'atm' },
+      { id: 'digital_currency' },
+      { id: 'digital_wallet' },
+      { id: 'voucher_card' },
+    ],
+    ...(ciclo === 'anual'
+      ? { installments: PARCELAS_ANUAL }
+      : { installments: 1, default_installments: 1 }),
+  };
+}
+
+export function urlDeAviso(): string | undefined {
+  if (!env.API_PUBLIC_URL) return undefined;
+  try {
+    const url = new URL(env.API_PUBLIC_URL);
+    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    if (url.protocol !== 'https:' || local) return undefined;
+    // source_news=webhooks: só o formato Webhook (com x-signature), sem o IPN antigo em dobro.
+    return `${env.API_PUBLIC_URL}/api/assinatura/mercadopago?source_news=webhooks`;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function criarPreferencia(params: {
+  pedidoId: string;
+  itemId: string;
+  titulo: string;
+  descricao: string;
+  valor: number;
+  ciclo: CicloCobranca;
+  pagador: ReturnType<typeof pagador>;
+  /** Página que recebe a volta do Mercado Pago, sem query. */
+  retorno: string;
+}): Promise<{ preferenciaId: string; checkoutUrl: string }> {
+  const agora = Date.now();
+  const voltar = (resultado: string) => `${params.retorno}?resultado=${resultado}&pedido=${params.pedidoId}`;
+
+  const resposta = await fetch(`${API}/checkout/preferences`, {
+    method: 'POST',
+    headers: cabecalhos(),
+    body: JSON.stringify({
+      items: [
+        {
+          id: params.itemId,
+          title: params.titulo,
+          description: params.descricao,
+          quantity: 1,
+          currency_id: 'BRL',
+          unit_price: Math.round(params.valor * 100) / 100,
+        },
+      ],
+      payer: params.pagador,
+      external_reference: params.pedidoId,
+      metadata: { pedido_id: params.pedidoId },
+      statement_descriptor: 'JA CLINICS',
+      payment_methods: meiosDePagamento(params.ciclo),
+      back_urls: {
+        success: voltar('aprovado'),
+        failure: voltar('recusado'),
+        pending: voltar('pendente'),
+      },
+      auto_return: 'approved',
+      notification_url: urlDeAviso(),
+      expires: true,
+      expiration_date_from: new Date(agora - 60_000).toISOString(),
+      expiration_date_to: new Date(agora + VALIDADE_PREFERENCIA_MS).toISOString(),
+    }),
+  });
+
+  const corpo = (await resposta.json().catch(() => null)) as {
+    id?: string;
+    init_point?: string;
+    sandbox_init_point?: string;
+  } | null;
+
+  if (!resposta.ok || !corpo?.id) {
+    console.error('[mercadopago] preferência recusada', resposta.status);
+    throw new AppError(502, 'Não foi possível abrir o pagamento.');
+  }
+
+  // Credencial antiga de teste (TEST-) usa o sandbox. A atual (APP_USR- de usuário de teste) usa o init_point.
+  const checkoutUrl = env.MERCADOPAGO_ACCESS_TOKEN.startsWith('TEST-')
+    ? corpo.sandbox_init_point
+    : corpo.init_point;
+  if (!checkoutUrl) throw new AppError(502, 'Não foi possível abrir o pagamento.');
+
+  console.info(
+    `[mercadopago] preferência ${corpo.id} criada: pedido ${params.pedidoId}, ${params.ciclo}, R$ ${params.valor.toFixed(2)}, aviso ${urlDeAviso() ? 'ligado' : 'DESLIGADO (API_PUBLIC_URL sem https)'}`,
+  );
+  return { preferenciaId: corpo.id, checkoutUrl };
+}
+
+/** `null` quando o pagamento não existe. Falha de rede ou do Mercado Pago lança, para o aviso ser reenviado. */
+export async function buscarPagamento(id: string): Promise<PagamentoMercadoPago | null> {
+  const resposta = await fetch(`${API}/v1/payments/${encodeURIComponent(id)}`, { headers: cabecalhos() });
+  if (resposta.status === 404) return null;
+  if (!resposta.ok) throw new AppError(502, 'Não foi possível consultar o pagamento.');
+  return (await resposta.json()) as PagamentoMercadoPago;
+}
+
+export async function buscarPagamentosDoPedido(pedidoId: string): Promise<PagamentoMercadoPago[]> {
+  const url = new URL(`${API}/v1/payments/search`);
+  url.searchParams.set('external_reference', pedidoId);
+  url.searchParams.set('sort', 'date_created');
+  url.searchParams.set('criteria', 'desc');
+  const resposta = await fetch(url, { headers: cabecalhos() });
+  if (!resposta.ok) throw new AppError(502, 'Não foi possível consultar o pagamento.');
+  const corpo = (await resposta.json()) as { results?: PagamentoMercadoPago[] };
+  return corpo.results ?? [];
+}
+
+export function valorConfere(valorPedido: number, valorPago: number) {
+  return Math.abs(valorPedido - valorPago) < 0.02;
+}
+
+/**
+ * Confere o cabeçalho `x-signature` do webhook (HMAC-SHA256 com a assinatura secreta da aplicação).
+ * Manifesto: `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` — partes ausentes saem do texto.
+ */
+export function assinaturaWebhookValida(params: {
+  assinatura: string | undefined;
+  requestId: string | undefined;
+  dataId: string | undefined;
+  segredo: string;
+}): boolean {
+  if (!params.assinatura || !params.segredo) return false;
+
+  let ts = '';
+  let v1 = '';
+  for (const parte of params.assinatura.split(',')) {
+    const [chave, ...resto] = parte.split('=');
+    const valor = resto.join('=').trim();
+    if (chave?.trim() === 'ts') ts = valor;
+    if (chave?.trim() === 'v1') v1 = valor;
+  }
+  if (!ts || !v1) return false;
+
+  const dataId = params.dataId?.trim();
+  const id = dataId && /^[a-z0-9]+$/i.test(dataId) ? dataId.toLowerCase() : dataId;
+  let manifesto = '';
+  if (id) manifesto += `id:${id};`;
+  if (params.requestId?.trim()) manifesto += `request-id:${params.requestId.trim()};`;
+  manifesto += `ts:${ts};`;
+
+  const esperado = createHmac('sha256', params.segredo).update(manifesto).digest('hex');
+  const recebido = Buffer.from(v1, 'utf8');
+  const calculado = Buffer.from(esperado, 'utf8');
+  return recebido.length === calculado.length && timingSafeEqual(recebido, calculado);
+}

@@ -205,3 +205,19 @@ export async function buscarUsuarioDaClinica(id: string, clinicaId: string) {
     select: { id: true, nome: true, email: true, perfil: { select: { nome: true } } },
   });
 }
+
+/** Primeiro administrador da clínica: é quem recebeu o acesso da compra. */
+export async function buscarAdministradorInicial(clinicaId: string) {
+  return prisma.usuario.findFirst({
+    where: { clinicaId, perfil: { nome: NOME_PERFIL_ADMINISTRADOR } },
+    orderBy: { criadoEm: 'asc' },
+    select: { id: true, nome: true, email: true, status: true, ultimoAcesso: true },
+  });
+}
+
+export async function definirSenha(id: string, clinicaId: string, senha: string): Promise<void> {
+  await prisma.usuario.update({
+    where: { id, clinicaId },
+    data: { senhaHash: await gerarHash(senha) },
+  });
+}

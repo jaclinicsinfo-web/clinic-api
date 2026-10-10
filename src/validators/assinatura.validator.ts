@@ -17,4 +17,10 @@ export const pedidoIdSchema = z.object({
   pedidoId: z.string().uuid('Pedido inválido.'),
 });
 
+export const pagamentoClinicaSchema = z.object({
+  plano: cadastroSchema.shape.plano,
+  ciclo: z.enum(['mensal', 'anual'], { message: 'Escolha mensal ou anual.' }),
+});
+
 export type InscricaoInput = z.infer<typeof inscricaoSchema>;
+export type PagamentoClinicaInput = z.infer<typeof pagamentoClinicaSchema>;

@@ -11,14 +11,19 @@ function sqlSessaoTenant(ctx: { clinicaId: string | null; modoSistema: boolean }
                             set_config('app.modo_sistema', ${ctx.modoSistema ? 'on' : ''}, true)`;
 }
 
+// Abrir clínica cria unidade, 5 perfis, formas de pagamento e o administrador na mesma transação.
+// O padrão de 5s do Prisma fica curto quando o banco responde devagar.
 definirExecutorTransacao((fn) =>
-  base.$transaction(async (tx) => {
-    const ctx = contextoTenant.getStore();
-    if (ctx) {
-      await tx.$executeRaw(sqlSessaoTenant(ctx));
-    }
-    return fn(tx);
-  }),
+  base.$transaction(
+    async (tx) => {
+      const ctx = contextoTenant.getStore();
+      if (ctx) {
+        await tx.$executeRaw(sqlSessaoTenant(ctx));
+      }
+      return fn(tx);
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  ),
 );
 
 const estendido = base.$extends({

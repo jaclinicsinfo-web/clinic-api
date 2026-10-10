@@ -58,6 +58,8 @@ export const env = {
 
   /** Access token do Mercado Pago. Vazio: o pagamento real fica desligado. */
   MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || '',
+  /** Assinatura secreta do webhook (Suas integrações › Webhooks). Preenchida: aviso sem x-signature válido é recusado. */
+  MERCADOPAGO_WEBHOOK_SECRET: process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim() || '',
 
   SMTP_HOST: process.env.SMTP_HOST?.trim() || '',
   SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),

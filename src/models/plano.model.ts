@@ -84,3 +84,26 @@ export async function assertPodeAdicionarUnidade(
     throw new AppError(403, mensagemLimiteUnidades(clinica.plano.codigo));
   }
 }
+
+/** Antes de cobrar outro plano: a clínica precisa caber no limite de contas e de unidades dele. */
+export async function assertClinicaCabeNoPlano(clinicaId: string, plano: Plano): Promise<void> {
+  const [usuarios, unidades] = await Promise.all([
+    prisma.usuario.count({ where: { clinicaId, status: 'ativo' } }),
+    prisma.unidade.count({ where: { clinicaId, ativo: true } }),
+  ]);
+
+  if (plano.limiteUsuarios !== null && usuarios > plano.limiteUsuarios) {
+    throw new AppError(
+      409,
+      `O plano ${plano.nome} permite até ${plano.limiteUsuarios} usuários ativos e a clínica tem ${usuarios}. Inative contas ou escolha outro plano.`,
+    );
+  }
+
+  const limiteUnidades = limiteUnidadesDoPlano(plano.codigo);
+  if (limiteUnidades !== null && unidades > limiteUnidades) {
+    throw new AppError(
+      409,
+      `O plano ${plano.nome} inclui ${limiteUnidades} unidade ativa e a clínica tem ${unidades}. Inative unidades ou escolha outro plano.`,
+    );
+  }
+}

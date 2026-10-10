@@ -25,11 +25,11 @@ import {
 } from '../models/unidade.model';
 import { assertPodeAdicionarUnidade, usoDaClinica } from '../models/plano.model';
 import { NOME_PERFIL_ADMINISTRADOR } from '../lib/perfis-padrao';
-import { assinarToken } from '../lib/jwt';
+import { assinarToken, assinarTokenPagamento } from '../lib/jwt';
 import { conferirSenha } from '../lib/password';
 import { enviarEmail, montarEmailRedefinirSenha } from '../lib/email';
 import { env, isDev } from '../config/env';
-import { mensagemTrialEncerrado } from '../lib/assinatura';
+import { bloqueioDeCobranca } from '../lib/assinatura';
 import { AppError } from '../lib/erros';
 import { comTenant, comoSistema } from '../lib/tenant';
 import {
@@ -61,9 +61,25 @@ export async function login(
       throw new AppError(403, 'Esta clínica está desativada.');
     }
 
-    const trialEncerrado = mensagemTrialEncerrado(usuario.clinica);
-    if (trialEncerrado) {
-      throw new AppError(403, trialEncerrado);
+    const bloqueio = bloqueioDeCobranca(usuario.clinica);
+    if (bloqueio) {
+      // A senha já conferiu: o administrador recebe um token curto que só serve para pagar.
+      const podePagar =
+        usuario.status === 'ativo' && usuario.perfil.nome === NOME_PERFIL_ADMINISTRADOR;
+      throw new AppError(
+        403,
+        podePagar ? bloqueio.mensagem : `${bloqueio.mensagem} Fale com o administrador da clínica.`,
+        {
+          codigo: bloqueio.codigo,
+          ...(podePagar
+            ? {
+                pagamentoToken: assinarTokenPagamento(usuario.id, usuario.clinicaId),
+                planoAtual: usuario.clinica.plano.codigo,
+                cicloAtual: usuario.clinica.cicloCobranca,
+              }
+            : {}),
+        },
+      );
     }
 
     if (usuario.status !== 'ativo') {

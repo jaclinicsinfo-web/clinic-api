@@ -23,7 +23,7 @@ export function tratarErros(
   }
 
   if (err instanceof AppError) {
-    res.status(err.status).json(montarErro(err.message));
+    res.status(err.status).json({ ...err.extras, ...montarErro(err.message) });
     return;
   }
 

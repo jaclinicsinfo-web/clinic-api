@@ -49,3 +49,19 @@ export const limiteWebhookWhatsapp = rateLimit({
     res.status(429).json(montarErro('Muitas requisições no webhook. Tente novamente em instantes.'));
   },
 });
+
+/** A página de retorno consulta algumas vezes enquanto o Pix compensa. */
+export const limiteSincronizacao = criarLimiter(
+  60,
+  'Muitas consultas de pagamento. Tente novamente em alguns minutos.',
+);
+
+export const limiteWebhookMercadoPago = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(montarErro('Muitas requisições no webhook. Tente novamente em instantes.'));
+  },
+});

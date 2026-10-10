@@ -59,6 +59,7 @@ export async function criarClinica(
     valorMensal?: number;
     situacaoCobranca?: string;
     cicloCobranca?: 'mensal' | 'anual';
+    pagoAte?: Date | null;
   },
   tx: ClientePrisma = prisma,
 ): Promise<Clinica> {
@@ -149,6 +150,7 @@ export interface DadosCadastro {
     valorMensal?: number;
     situacaoCobranca?: string;
     cicloCobranca?: 'mensal' | 'anual';
+    pagoAte?: Date | null;
   };
 }
 
@@ -166,7 +168,11 @@ const LOCK_SETUP_INICIAL = 872_341;
  */
 export async function criarCadastroPosCompra(
   dados: DadosCadastro,
-  opcoes: { somenteSistemaVazio?: boolean } = {},
+  opcoes: {
+    somenteSistemaVazio?: boolean;
+    /** Roda dentro da mesma transação, depois que a clínica existe (ex.: marcar o pedido como pago). */
+    aoCriar?: (tx: Prisma.TransactionClient, clinicaId: string) => Promise<unknown>;
+  } = {},
 ): Promise<ResultadoCadastro> {
   const { clinicaId, usuarioId } = await transacao(async (tx) => {
     if (opcoes.somenteSistemaVazio) {
@@ -190,6 +196,7 @@ export async function criarCadastroPosCompra(
         valorMensal: dados.acesso?.valorMensal,
         situacaoCobranca: dados.acesso?.situacaoCobranca,
         cicloCobranca: dados.acesso?.cicloCobranca,
+        pagoAte: dados.acesso?.pagoAte,
       },
       tx,
     );
@@ -218,6 +225,8 @@ export async function criarCadastroPosCompra(
       },
       tx,
     );
+
+    if (opcoes.aoCriar) await opcoes.aoCriar(tx, clinica.id);
 
     return { clinicaId: clinica.id, usuarioId: usuario.id };
   });
