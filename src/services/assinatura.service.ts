@@ -60,6 +60,8 @@ export interface ResultadoPedido {
   email: string;
   /** Até quando a clínica ficou paga (só pagamento de clínica existente). */
   pagoAte?: string | null;
+  /** Clínica nova: o e-mail com a senha saiu? */
+  acessoEnviado?: boolean;
   senhaTemporaria?: string;
 }
 
@@ -339,6 +341,7 @@ function resultadoDoPedido(pedido: Pedido): ResultadoPedido {
       status: 'pago',
       tipo,
       email,
+      acessoEnviado: Boolean(pedido.acessoEnviadoEm),
       mensagem: pedido.acessoEnviadoEm
         ? 'O acesso desta clínica já foi enviado.'
         : 'A clínica foi aberta. Se o e-mail não chegar, use Esqueci minha senha com o mesmo e-mail.',
@@ -416,7 +419,7 @@ async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): P
     });
     if (!entrega.senhaTemporaria) await marcarAcessoEnviado(pedido.id);
     console.info(`[assinatura] pedido ${pedido.id} pago: clínica aberta, pago até ${fim.toISOString()}, acesso enviado para ${dados.usuario.email}`);
-    return { status: 'pago', tipo: 'nova_clinica', ...entrega };
+    return { status: 'pago', tipo: 'nova_clinica', acessoEnviado: !entrega.senhaTemporaria, ...entrega };
   } catch (err) {
     // A clínica já está paga e aberta. O painel mostra o pedido para reenviar o acesso.
     console.error('[assinatura] acesso não enviado', pedido.id, err instanceof Error ? err.message : err);
@@ -424,6 +427,7 @@ async function cumprirNovaClinica(pedido: Pedido, pagamentoId: string | null): P
       status: 'pago',
       tipo: 'nova_clinica',
       email: dados.usuario.email,
+      acessoEnviado: false,
       mensagem: 'A clínica foi aberta, mas o e-mail com o acesso não saiu. Use Esqueci minha senha com o mesmo e-mail.',
     };
   }

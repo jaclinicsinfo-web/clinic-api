@@ -161,7 +161,14 @@ export async function webhookMercadoPago(req: Request, res: Response): Promise<v
   const idDaUrl = typeof daQuery === 'string' ? daQuery.trim() : '';
 
   if (!avisoAutentico(req, idDaUrl)) {
-    console.warn('[mercadopago] aviso recusado: x-signature ausente ou inválido.');
+    // Nunca loga o segredo nem o hash: só o que ajuda a achar a causa.
+    const assinatura = req.get('x-signature') ?? '';
+    const ts = /ts=([^,]+)/.exec(assinatura)?.[1] ?? '-';
+    console.warn(
+      `[mercadopago] aviso recusado: x-signature ${assinatura ? `presente (ts=${ts})` : 'AUSENTE'}, ` +
+        `x-request-id ${req.get('x-request-id') ? 'presente' : 'ausente'}, data.id=${idDaUrl || '-'}, ` +
+        `query=${Object.keys(req.query).join('&') || '-'}`,
+    );
     res.status(401).json(montarErro('Assinatura inválida.'));
     return;
   }
