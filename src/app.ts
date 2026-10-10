@@ -37,6 +37,8 @@ export function criarApp(): Application {
   app.use(express.urlencoded({ extended: true }));
 
   app.disable('x-powered-by');
+  // Atrás do proxy do Dokploy: o IP real do visitante vem em X-Forwarded-For (limite de tentativas por pessoa).
+  app.set('trust proxy', 1);
 
   app.use('/api', rotas);
 

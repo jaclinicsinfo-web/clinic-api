@@ -66,6 +66,27 @@ export function urlDeAviso(): string | undefined {
   }
 }
 
+let vendedorDeTeste: Promise<boolean> | null = null;
+
+/**
+ * Credencial de conta vendedora de teste: o Mercado Pago recusa o pagamento quando o e-mail do
+ * pagador é de uma conta real ("uma das partes é de teste"). Consultado uma vez por processo.
+ */
+function credencialDeTeste(): Promise<boolean> {
+  if (env.MERCADOPAGO_ACCESS_TOKEN.startsWith('TEST-')) return Promise.resolve(true);
+  vendedorDeTeste ??= fetch(`${API}/users/me`, { headers: cabecalhos() })
+    .then(async (resposta) => {
+      if (!resposta.ok) throw new Error(String(resposta.status));
+      const corpo = (await resposta.json()) as { tags?: string[] };
+      return Boolean(corpo.tags?.includes('test_user'));
+    })
+    .catch(() => {
+      vendedorDeTeste = null;
+      return false;
+    });
+  return vendedorDeTeste;
+}
+
 export async function criarPreferencia(params: {
   pedidoId: string;
   itemId: string;
@@ -78,6 +99,10 @@ export async function criarPreferencia(params: {
   retorno: string;
 }): Promise<{ preferenciaId: string; checkoutUrl: string }> {
   const agora = Date.now();
+  // Em teste, o pagador é a conta compradora de teste logada no checkout, não o e-mail do formulário.
+  const payer = (await credencialDeTeste())
+    ? { name: params.pagador.name, surname: params.pagador.surname }
+    : params.pagador;
   const voltar = (resultado: string) => `${params.retorno}?resultado=${resultado}&pedido=${params.pedidoId}`;
 
   const resposta = await fetch(`${API}/checkout/preferences`, {
@@ -94,7 +119,7 @@ export async function criarPreferencia(params: {
           unit_price: Math.round(params.valor * 100) / 100,
         },
       ],
-      payer: params.pagador,
+      payer,
       external_reference: params.pedidoId,
       metadata: { pedido_id: params.pedidoId },
       statement_descriptor: 'JA CLINICS',
