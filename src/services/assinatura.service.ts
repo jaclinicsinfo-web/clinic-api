@@ -52,6 +52,8 @@ interface ResultadoAcesso {
   mensagem: string;
   email: string;
   senhaTemporaria?: string;
+  /** false: a clínica abriu, mas o e-mail com a senha não saiu. */
+  acessoEnviado?: boolean;
 }
 
 export interface ResultadoPedido {
@@ -210,12 +212,22 @@ export async function iniciarAcessoGratuito(dados: InscricaoInput): Promise<Resu
       gratuitoAte: trialExpiraEm,
     });
   } catch (err) {
-    if (!isDev) throw err;
-    console.info(`[email] Falha no envio para ${dados.usuario.email}. Senha temporária: ${senha}`);
+    // A clínica já existe: responder erro faria a pessoa tentar de novo e bater em "CNPJ já cadastrado".
+    console.error(`[email] teste grátis aberto sem e-mail para ${dados.usuario.email}: ${mensagemDeErro(err)}`);
+    if (isDev) {
+      console.info(`[email] Senha temporária de ${dados.usuario.email}: ${senha}`);
+      return {
+        mensagem: 'A clínica foi aberta, mas o e-mail não saiu. Use a senha temporária abaixo.',
+        email: dados.usuario.email,
+        senhaTemporaria: senha,
+        acessoEnviado: false,
+      };
+    }
     return {
-      mensagem: 'A clínica foi aberta, mas o e-mail não saiu. Use a senha temporária abaixo.',
+      mensagem:
+        'A clínica foi aberta, mas o e-mail com a senha não saiu. Fale com a gente no WhatsApp para receber o acesso.',
       email: dados.usuario.email,
-      senhaTemporaria: senha,
+      acessoEnviado: false,
     };
   }
 }
