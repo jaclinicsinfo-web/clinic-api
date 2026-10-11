@@ -18,7 +18,8 @@ model Plano {
   criadoEm       DateTime @default(now())
   atualizadoEm   DateTime @updatedAt
 
-  clinicas Clinica[]
+  clinicas          Clinica[] @relation("PlanoDaClinica")
+  clinicasAgendadas Clinica[] @relation("PlanoAgendado")
 
   @@map("planos")
 }
@@ -47,10 +48,14 @@ model Clinica {
   cicloCobranca    String    @default("mensal")
   trialExpiraEm    DateTime?
   pagoAte          DateTime? @db.Timestamptz(3)
+  /// Downgrade (ou anual → mensal) agendado para o próximo vencimento.
+  planoAgendadoId  String?   @db.Uuid
+  cicloAgendado    String?
   criadoEm         DateTime  @default(now())
   atualizadoEm     DateTime  @updatedAt
 
-  plano                Plano                   @relation(fields: [planoId], references: [id])
+  plano                Plano                   @relation("PlanoDaClinica", fields: [planoId], references: [id])
+  planoAgendado        Plano?                  @relation("PlanoAgendado", fields: [planoAgendadoId], references: [id])
   unidades             Unidade[]
   perfisAcesso         PerfilAcesso[]
   usuarios             Usuario[]
@@ -85,30 +90,82 @@ model Clinica {
 }
 
 model PedidoAssinatura {
-  id              String    @id @default(uuid()) @db.Uuid
+  id                     String    @id @default(uuid()) @db.Uuid
   /// pendente | processando | pago | revisao | estornado | expirado
-  status          String    @default("pendente")
-  /// nova_clinica (landing) | clinica_existente (teste → pago ou renovação)
-  tipo            String    @default("nova_clinica")
-  planoCodigo     String
-  ciclo           String    @default("mensal")
-  valor           Decimal   @db.Decimal(12, 2)
-  dados           Json
-  preferenciaId   String?
-  pagamentoId     String?   @unique
-  clinicaId       String?   @db.Uuid
-  pagoEm          DateTime? @db.Timestamptz(3)
-  periodoInicio   DateTime? @db.Timestamptz(3)
-  periodoFim      DateTime? @db.Timestamptz(3)
-  acessoEnviadoEm DateTime? @db.Timestamptz(3)
+  status                 String    @default("pendente")
+  /// nova_clinica (landing) | clinica_existente (teste → pago ou renovação) | troca_plano | recorrente
+  tipo                   String    @default("nova_clinica")
+  planoCodigo            String
+  ciclo                  String    @default("mensal")
+  valor                  Decimal   @db.Decimal(12, 2)
+  dados                  Json
+  preferenciaId          String?
+  pagamentoId            String?   @unique
+  clinicaId              String?   @db.Uuid
+  pagoEm                 DateTime? @db.Timestamptz(3)
+  periodoInicio          DateTime? @db.Timestamptz(3)
+  periodoFim             DateTime? @db.Timestamptz(3)
+  acessoEnviadoEm        DateTime? @db.Timestamptz(3)
   /// Última conferência com o Mercado Pago (tarefa periódica).
-  conferidoEm     DateTime? @db.Timestamptz(3)
-  criadoEm        DateTime  @default(now())
-  atualizadoEm    DateTime  @updatedAt
+  conferidoEm            DateTime? @db.Timestamptz(3)
+  /// pix | cartao_credito | outro
+  meio                   String?
+  parcelas               Int?
+  /// Com os juros do parcelamento, se houver.
+  totalPago              Decimal?  @db.Decimal(12, 2)
+  estornadoEm            DateTime? @db.Timestamptz(3)
+  /// Sequencial, dado quando o pedido é pago (sequência pedidos_assinatura_recibo_seq).
+  numeroRecibo           Int?      @unique
+  /// troca_plano: o que a clínica tinha antes (conferência na confirmação e estorno).
+  planoAnteriorCodigo    String?
+  cicloAnterior          String?
+  pagoAteAnterior        DateTime? @db.Timestamptz(3)
+  /// troca_plano de ciclo: o que sobrava do período anterior, descontado do valor.
+  credito                Decimal?  @db.Decimal(12, 2)
+  /// recorrente: cobrança automática que gerou o pedido.
+  assinaturaRecorrenteId String?   @db.Uuid
+  criadoEm               DateTime  @default(now())
+  atualizadoEm           DateTime  @updatedAt
 
   @@index([clinicaId])
   @@index([status])
+  @@index([assinaturaRecorrenteId])
   @@map("pedidos_assinatura")
+}
+
+/// Cobrança automática no cartão (assinatura sem plano do Mercado Pago, "preapproval").
+/// No máximo uma não cancelada por clínica: índice parcial "assinaturas_recorrentes_ativa_key", criado à mão na
+/// migração 20261012090000_cobranca_fase2 (o Prisma não descreve índice parcial). Se um `prisma migrate dev`
+/// gerar DROP INDEX desse índice, apague essa linha da migração gerada.
+model AssinaturaRecorrente {
+  id                 String    @id @default(uuid()) @db.Uuid
+  clinicaId          String    @db.Uuid
+  preapprovalId      String?   @unique
+  /// pendente | ativa | pausada | cancelada
+  status             String    @default("pendente")
+  planoCodigo        String
+  ciclo              String
+  valor              Decimal   @db.Decimal(12, 2)
+  /// init_point do Mercado Pago, para autorizar (ou trocar) o cartão.
+  linkAutorizacao    String?
+  cartaoFinal        String?
+  proximaCobrancaEm  DateTime? @db.Timestamptz(3)
+  ultimaFalhaEm      DateTime? @db.Timestamptz(3)
+  ultimaFalhaMotivo  String?
+  /// Reajuste de preço avisado por e-mail, aplicado no Mercado Pago a partir de valorNovoEm.
+  valorNovo          Decimal?  @db.Decimal(12, 2)
+  valorNovoEm        DateTime? @db.Timestamptz(3)
+  ativadaPor         String?   @db.Uuid
+  ativadaEm          DateTime? @db.Timestamptz(3)
+  canceladaEm        DateTime? @db.Timestamptz(3)
+  /// usuario | painel | mercadopago | falhas
+  motivoCancelamento String?
+  conferidaEm        DateTime? @db.Timestamptz(3)
+  criadoEm           DateTime  @default(now()) @db.Timestamptz(3)
+  atualizadoEm       DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@index([clinicaId])
+  @@map("assinaturas_recorrentes")
 }
 
 model Unidade {

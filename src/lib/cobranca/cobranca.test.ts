@@ -32,6 +32,16 @@ describe('marcoDeCobranca', () => {
     }
   });
 
+  it('cobrança automática: um aviso 3 dias antes e os de atraso continuam', () => {
+    const auto = (dias: number) => ({ ...pago(new Date(agora.getTime() + dias * DIA)), automatica: true });
+    assert.equal(marcoDeCobranca(auto(5), agora), null);
+    assert.equal(marcoDeCobranca(auto(3), agora)?.marco, 'auto-3');
+    assert.equal(marcoDeCobranca(auto(1), agora)?.marco, 'auto-3');
+    assert.equal(marcoDeCobranca(auto(0), agora), null);
+    assert.equal(marcoDeCobranca(auto(-1), agora)?.marco, 'D+1');
+    assert.equal(marcoDeCobranca({ ...pago(new Date(agora.getTime() + 30 * DIA), 'anual'), automatica: true }, agora), null);
+  });
+
   it('não manda marco velho quando o servidor ficou fora do ar', () => {
     // D-5 alcançado há 3 dias e D-1 ainda não: nada (o D-1 vem no dia certo).
     assert.equal(marcoDeCobranca(pago(new Date(agora.getTime() + 2 * DIA)), agora), null);

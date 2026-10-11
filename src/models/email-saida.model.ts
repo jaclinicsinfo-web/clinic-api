@@ -68,8 +68,9 @@ export async function marcarEnviado(id: string) {
 }
 
 export async function marcarFalha(id: string, dados: { tentativas: number; proxima: Date | null; erro: string }) {
-  await prisma.emailSaida.update({
-    where: { id },
+  // Cancelado durante o envio (ex.: acesso reenviado com outra senha) não volta para a fila.
+  await prisma.emailSaida.updateMany({
+    where: { id, status: { not: 'cancelado' } },
     data: {
       tentativas: dados.tentativas,
       ultimoErro: dados.erro.slice(0, 500),
@@ -85,4 +86,13 @@ export async function cancelarEmail(id: string, motivo: string) {
     where: { id },
     data: { status: 'cancelado', conteudo: null, ultimoErro: motivo.slice(0, 500) },
   });
+}
+
+/** Cancela os e-mails de acesso ainda na fila de um pedido (só os que não estão saindo agora). */
+export async function cancelarAcessosPendentes(pedidoId: string, motivo: string) {
+  const cancelados = await prisma.emailSaida.updateMany({
+    where: { pedidoId, tipo: 'acesso', status: { in: ['pendente', 'enviando', 'falhou'] } },
+    data: { status: 'cancelado', conteudo: null, ultimoErro: motivo.slice(0, 500) },
+  });
+  return cancelados.count;
 }

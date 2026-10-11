@@ -21,7 +21,18 @@ export type TipoEventoPagamento =
   | 'lembrete_enfileirado'
   | 'conciliacao_aplicou'
   | 'pedido_expirado'
-  | 'pedido_revisao_pendente';
+  | 'pedido_revisao_pendente'
+  | 'troca_agendada'
+  | 'troca_agendada_cancelada'
+  | 'troca_aplicada'
+  | 'troca_nao_aplicada'
+  | 'automatica_criada'
+  | 'automatica_ativada'
+  | 'automatica_cancelada'
+  | 'automatica_atualizada'
+  | 'cobranca_automatica_aprovada'
+  | 'cobranca_automatica_recusada'
+  | 'reajuste_agendado';
 
 export interface EventoPagamento extends Omit<DadosEventoPagamento, 'tipo'> {
   tipo: TipoEventoPagamento;

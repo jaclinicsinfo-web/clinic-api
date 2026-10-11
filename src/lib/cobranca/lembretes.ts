@@ -1,7 +1,7 @@
 import { env } from '../../config/env';
 import { marcoDeCobranca, type MarcoCobranca } from '../assinatura';
 import { definirConferenciaDeLembrete, enfileirarEmail } from '../email/fila';
-import { montarEmailLembrete } from '../email/templates/cobranca';
+import { montarEmailAvisoAutomatica, montarEmailLembrete } from '../email/templates/cobranca';
 import { mensagemDeErro, registrarEvento } from '../eventos-pagamento';
 import { comoSistema } from '../tenant';
 import {
@@ -25,6 +25,7 @@ const TITULO_SINO: Record<MarcoCobranca, string> = {
   'D+5': 'Acesso bloqueado',
   'teste-2': 'O teste grátis está terminando',
   'teste-fim': 'O teste grátis terminou',
+  'auto-3': 'Cobrança automática em breve',
 };
 
 export function dentroDaJanela(agora = new Date(), janela = env.LEMBRETES_JANELA): boolean {
@@ -44,6 +45,9 @@ definirConferenciaDeLembrete(async (email) => {
   if (!marco || marco.referencia.getTime() !== email.referencia.getTime()) {
     return 'A situação mudou (pagamento ou fim do teste) antes do envio.';
   }
+  if (email.chave.includes(':auto-3:') && !clinica.automatica) {
+    return 'A cobrança automática foi desligada antes do envio.';
+  }
   return null;
 });
 
@@ -57,8 +61,13 @@ async function avisarClinica(clinica: ClinicaParaLembrete, agora: Date): Promise
   const base = env.FRONTEND_URL.replace(/\/+$/, '');
   const bloqueada = marco.marco === 'D+5' || marco.marco === 'teste-fim';
   const link = bloqueada ? `${base}/login` : `${base}/configuracoes/assinatura`;
-  const ciclo = clinica.cicloCobranca === 'anual' ? 'anual' : 'mensal';
-  const valor = ciclo === 'anual' ? clinica.precoAnual : clinica.precoMensal;
+  const ciclo = clinica.cicloRenovacao === 'anual' ? 'anual' : 'mensal';
+  const valor =
+    marco.marco === 'auto-3' && clinica.automaticaValor !== null
+      ? clinica.automaticaValor
+      : ciclo === 'anual'
+        ? clinica.precoAnual
+        : clinica.precoMensal;
   const referencia = marco.referencia.toISOString();
 
   const destinatarios = admins.map((admin) => ({ email: admin.email, nome: admin.nome as string | null }));
@@ -69,18 +78,31 @@ async function avisarClinica(clinica: ClinicaParaLembrete, agora: Date): Promise
 
   let novos = 0;
   for (const destino of destinatarios) {
-    const mensagem = montarEmailLembrete({
-      marco: marco.marco,
-      clinica: clinica.nomeFantasia,
-      nomeAdmin: destino.nome,
-      plano: clinica.planoNome,
-      ciclo,
-      valor,
-      vence: marco.vence,
-      bloqueia: marco.bloqueia,
-      link,
-      agora,
-    });
+    const mensagem =
+      marco.marco === 'auto-3'
+        ? montarEmailAvisoAutomatica({
+            clinica: clinica.nomeFantasia,
+            nomeAdmin: destino.nome,
+            plano: clinica.planoNome,
+            ciclo,
+            valor,
+            cartaoFinal: clinica.cartaoFinal,
+            cobraEm: marco.vence,
+            link,
+            agora,
+          })
+        : montarEmailLembrete({
+            marco: marco.marco,
+            clinica: clinica.nomeFantasia,
+            nomeAdmin: destino.nome,
+            plano: clinica.planoNome,
+            ciclo,
+            valor,
+            vence: marco.vence,
+            bloqueia: marco.bloqueia,
+            link,
+            agora,
+          });
     const { novo } = await enfileirarEmail({
       tipo: 'lembrete_cobranca',
       chave: `cobranca:${clinica.id}:${referencia}:${marco.marco}:${destino.email.toLowerCase()}`,
@@ -102,7 +124,7 @@ async function avisarClinica(clinica: ClinicaParaLembrete, agora: Date): Promise
         usuarioId: admin.id,
         chave: `cobranca:${referencia}:${marco.marco}`,
         titulo: TITULO_SINO[marco.marco],
-        descricao: mensagemCurta(marco.marco, marco.vence, marco.bloqueia),
+        descricao: mensagemCurta(marco.marco, marco.vence, marco.bloqueia, valor),
         href: '/configuracoes/assinatura',
         severidade: marco.marco.startsWith('D+') || marco.marco === 'teste-fim' ? 'alta' : 'media',
       }),
@@ -121,8 +143,12 @@ async function avisarClinica(clinica: ClinicaParaLembrete, agora: Date): Promise
   return novos;
 }
 
-function mensagemCurta(marco: MarcoCobranca, vence: Date, bloqueia: Date): string {
+function mensagemCurta(marco: MarcoCobranca, vence: Date, bloqueia: Date, valor: number): string {
   const data = (d: Date) => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(d);
+  if (marco === 'auto-3') {
+    const reais = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+    return `Vamos cobrar ${reais} no cartão em ${data(vence)}.`;
+  }
   if (marco === 'teste-2') return `O teste vale até ${data(vence)}. Assine para não interromper o uso.`;
   if (marco === 'teste-fim') return 'Escolha um plano para continuar usando o sistema.';
   if (marco === 'D+5') return 'O prazo de pagamento terminou. Pague para voltar a usar.';

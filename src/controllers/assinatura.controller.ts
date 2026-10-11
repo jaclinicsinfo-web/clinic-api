@@ -8,6 +8,7 @@ import { assinaturaWebhookValida } from '../lib/mercadopago';
 import { comoSistema } from '../lib/tenant';
 import { montarErro } from '../views/error.view';
 import {
+  clinicaIdSchema,
   inscricaoSchema,
   pagamentoClinicaSchema,
   pedidoIdSchema,
@@ -19,10 +20,19 @@ import {
   iniciarCheckout,
   iniciarCheckoutClinica,
   obterAssinaturaClinica,
-  processarAvisoMercadoPago,
   reenviarAcesso,
   sincronizarPedido,
 } from '../services/assinatura.service';
+import {
+  ativarAutomatica,
+  cancelarAutomaticaPeloPainel,
+  desativarAutomatica,
+  processarAvisoAssinatura,
+  processarAvisoCobrancaAutomatica,
+  processarPagamentoMercadoPago,
+} from '../services/cobranca-automatica.service';
+import { listarPagamentos, reciboHtml } from '../services/pagamentos.service';
+import { cancelarTroca, simularTroca, trocarPlano } from '../services/troca-plano.service';
 
 export async function acessoGratuito(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -93,6 +103,89 @@ export async function assinaturaDaClinica(req: Request, res: Response, next: Nex
   }
 }
 
+/** Sessão normal do sistema (rotas com `autenticar`). */
+function acessoDaSessao(req: Request): AcessoPagamento {
+  const auth = req.auth!;
+  return { usuarioId: auth.sub, clinicaId: auth.clinicaId };
+}
+
+export async function pagamentosDaClinica(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    res.json(await comoSistema(() => listarPagamentos(acesso)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reciboDoPagamento(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    const { pedidoId } = pedidoIdSchema.parse({ pedidoId: req.params.id });
+    const html = await comoSistema(() => reciboHtml(acesso, pedidoId));
+    res.set('Cache-Control', 'no-store').type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function simularTrocaClinica(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    const escolha = pagamentoClinicaSchema.parse(req.query);
+    res.json(await comoSistema(() => simularTroca(acesso, escolha)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function trocarPlanoClinica(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    const escolha = pagamentoClinicaSchema.parse(req.body);
+    const resultado = await comoSistema(() => trocarPlano(acesso, escolha));
+    res.status(resultado.acao === 'checkout' ? 201 : 200).json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelarTrocaAgendada(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    res.json(await comoSistema(() => cancelarTroca(acesso)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function ativarCobrancaAutomatica(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    res.status(201).json(await comoSistema(() => ativarAutomatica(acesso)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function desativarCobrancaAutomatica(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const acesso = acessoDaSessao(req);
+    res.json(await comoSistema(() => desativarAutomatica(acesso)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelarAutomaticaPainel(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clinicaId } = clinicaIdSchema.parse({ clinicaId: req.params.clinicaId });
+    res.json(await comoSistema(() => cancelarAutomaticaPeloPainel(clinicaId)));
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function checkoutClinica(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const acesso = acessoDePagamento(req);
@@ -148,6 +241,17 @@ function avisoAutentico(req: Request, dataId: string): boolean {
 }
 
 /**
+ * Tópicos tratados: payment; subscription_preapproval (estado da cobrança automática) e
+ * subscription_authorized_payment (cada cobrança dela). Os nomes antigos (IPN) também.
+ */
+function tratadorDoAviso(tipo: string): ((id: string) => Promise<void>) | null {
+  if (tipo === 'subscription_preapproval' || tipo === 'preapproval') return processarAvisoAssinatura;
+  if (tipo === 'subscription_authorized_payment' || tipo === 'authorized_payment') return processarAvisoCobrancaAutomatica;
+  if (!tipo || tipo.includes('payment')) return processarPagamentoMercadoPago;
+  return null;
+}
+
+/**
  * 200: aviso aplicado ou que não nos interessa. 401: assinatura inválida.
  * 500: falha passageira (banco, rede, Mercado Pago) — o Mercado Pago reenvia depois.
  */
@@ -186,7 +290,8 @@ export async function webhookMercadoPago(req: Request, res: Response): Promise<v
   }
 
   const tipo = String(req.query.type || req.query.topic || corpo?.type || corpo?.topic || corpo?.action || '');
-  if (tipo && !tipo.includes('payment')) {
+  const processar = tratadorDoAviso(tipo);
+  if (!processar) {
     res.status(200).json({ ok: true });
     return;
   }
@@ -200,7 +305,7 @@ export async function webhookMercadoPago(req: Request, res: Response): Promise<v
     detalhes: { query: req.query, action: corpo?.action ?? null, assinatura: env.MERCADOPAGO_WEBHOOK_SECRET ? 'conferida' : 'não conferida' },
   });
   try {
-    await comoSistema(() => processarAvisoMercadoPago(id));
+    await comoSistema(() => processar(id));
     res.status(200).json({ ok: true });
   } catch (err) {
     await registrarEvento({

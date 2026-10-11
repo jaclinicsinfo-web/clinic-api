@@ -53,7 +53,15 @@ export interface ClinicaCobranca {
 
 /** Soma 1 mês ou 12 meses mantendo o dia. 31/01 + 1 mês vira 28/02 (ou 29/02). */
 export function somarCiclo(data: Date, ciclo: CicloCobranca): Date {
-  const meses = ciclo === 'anual' ? 12 : 1;
+  return somarMeses(data, ciclo === 'anual' ? 12 : 1);
+}
+
+/** Volta 1 mês ou 12 meses mantendo o dia (o contrário de somarCiclo). */
+export function subtrairCiclo(data: Date, ciclo: CicloCobranca): Date {
+  return somarMeses(data, ciclo === 'anual' ? -12 : -1);
+}
+
+function somarMeses(data: Date, meses: number): Date {
   const resultado = new Date(data.getTime());
   const dia = resultado.getUTCDate();
   resultado.setUTCDate(1);
@@ -134,7 +142,18 @@ export function bloqueioDeCobranca(
   return null;
 }
 
-export type MarcoCobranca = 'D-30' | 'D-5' | 'D-1' | 'D0' | 'D+1' | 'D+3' | 'D+5' | 'teste-2' | 'teste-fim';
+export type MarcoCobranca =
+  | 'D-30'
+  | 'D-5'
+  | 'D-1'
+  | 'D0'
+  | 'D+1'
+  | 'D+3'
+  | 'D+5'
+  | 'teste-2'
+  | 'teste-fim'
+  /** Cobrança automática ativa: "vamos cobrar no cartão em dd/mm". */
+  | 'auto-3';
 
 /** Dia de calendário em São Paulo, como número de dias desde 1970. */
 function diaEmSaoPaulo(data: Date): number {
@@ -164,9 +183,10 @@ export interface MarcoAtual {
 /**
  * Lembrete que cabe agora: o marco mais avançado já alcançado, se não estiver velho demais.
  * Só para clínica ativa em teste ou paga pelo Mercado Pago (pagoAte preenchido).
+ * Com a cobrança automática ativa, os avisos antes do vencimento viram um só, três dias antes.
  */
 export function marcoDeCobranca(
-  clinica: ClinicaCobranca & { cicloCobranca?: string | null },
+  clinica: ClinicaCobranca & { cicloCobranca?: string | null; automatica?: boolean },
   agora = new Date(),
 ): MarcoAtual | null {
   if (clinica.status && clinica.status !== 'ativa') return null;
@@ -191,18 +211,127 @@ export function marcoDeCobranca(
   }
 
   const dias = diasAte(vence, agora);
-  const marcos: { marco: MarcoCobranca; limite: number }[] = [
+  const atraso: { marco: MarcoCobranca; limite: number }[] = [
     { marco: 'D+3', limite: -3 },
     { marco: 'D+1', limite: -1 },
-    { marco: 'D0', limite: 0 },
-    { marco: 'D-1', limite: 1 },
-    { marco: 'D-5', limite: 5 },
-    ...(clinica.cicloCobranca === 'anual' ? [{ marco: 'D-30' as const, limite: 30 }] : []),
   ];
+  const marcos: { marco: MarcoCobranca; limite: number }[] = clinica.automatica
+    ? [...atraso, { marco: 'auto-3', limite: 3 }]
+    : [
+        ...atraso,
+        { marco: 'D0', limite: 0 },
+        { marco: 'D-1', limite: 1 },
+        { marco: 'D-5', limite: 5 },
+        ...(clinica.cicloCobranca === 'anual' ? [{ marco: 'D-30' as const, limite: 30 }] : []),
+      ];
   const alcancado = marcos.find((item) => dias <= item.limite);
   if (!alcancado) return null;
   if (alcancado.limite - dias > ATRASO_MAXIMO_DIAS) return null;
   return { marco: alcancado.marco, ...base };
+}
+
+// ---------------------------------------------------------------- troca de plano no meio do período
+
+/** Diferença abaixo disso não é cobrada: a troca acontece sem pagamento. */
+export const VALOR_MINIMO_TROCA = 5;
+
+export interface PrecoPlano {
+  codigo: string;
+  precoMensal: number;
+  precoAnual: number;
+}
+
+export function precoDoCiclo(plano: PrecoPlano, ciclo: CicloCobranca): number {
+  return ciclo === 'anual' ? plano.precoAnual : plano.precoMensal;
+}
+
+/** Receita mensal da clínica: no anual, o preço anual dividido por 12. */
+export function valorMensalDe(plano: PrecoPlano, ciclo: CicloCobranca): number {
+  return ciclo === 'anual' ? centavos(plano.precoAnual / 12) : plano.precoMensal;
+}
+
+function centavos(valor: number): number {
+  return Math.round(valor * 100) / 100;
+}
+
+export type ResultadoTroca =
+  /** Mesmo plano e ciclo: é a renovação de sempre. */
+  | { tipo: 'renovacao'; valor: number }
+  /** Plano mais caro no mesmo ciclo: paga a diferença dos dias que faltam; o vencimento não muda. */
+  | { tipo: 'upgrade'; valor: number; mantemVencimento: true }
+  /** Mensal ↔ anual: o novo ciclo começa agora e o que sobra do atual vira crédito. */
+  | { tipo: 'troca_ciclo'; valor: number; credito: number; novoInicio: Date; novoFim: Date }
+  /** Plano mais barato (ou crédito maior que o novo ciclo): vale no próximo vencimento, nada é cobrado. */
+  | { tipo: 'downgrade_agendado'; aPartirDe: Date }
+  /** Diferença abaixo do mínimo: troca na hora, sem cobrança. Com novoFim, o ciclo também muda. */
+  | { tipo: 'sem_custo'; credito?: number; novoInicio?: Date; novoFim?: Date }
+  /** Atrasada, bloqueada, em teste ou sem vencimento: paga o período cheio do plano escolhido. */
+  | { tipo: 'periodo_cheio'; valor: number };
+
+export interface EntradaTroca {
+  clinica: ClinicaCobranca;
+  planoAtual: PrecoPlano;
+  cicloAtual: CicloCobranca;
+  planoNovo: PrecoPlano;
+  cicloNovo: CicloCobranca;
+  /** Início do período em curso (último pedido pago de período cheio). Sem ele: vencimento menos um ciclo. */
+  periodoInicio: Date | null;
+  /** Quanto valeu o período em curso. Sem ele: o preço do plano atual no ciclo atual. */
+  valorPeriodoAtual?: number | null;
+  agora?: Date;
+}
+
+/**
+ * Proporção do período em curso que ainda falta, contada em dias de calendário (São Paulo).
+ * Passa de 1 quando a clínica pagou adiantado mais de um período.
+ */
+export function proporcaoRestante(pagoAte: Date, periodoInicio: Date, agora = new Date()): number {
+  const restantes = Math.max(0, diasAte(pagoAte, agora));
+  const total = Math.max(1, diasAte(pagoAte, periodoInicio));
+  return restantes / total;
+}
+
+/**
+ * Quanto custa trocar de plano ou de ciclo agora e o que acontece com o vencimento.
+ * upgrade:     (preço novo − preço atual) × proporção
+ * troca ciclo: preço do novo ciclo − (valor do período atual × proporção)
+ */
+export function calcularTrocaDePlano(entrada: EntradaTroca): ResultadoTroca {
+  const agora = entrada.agora ?? new Date();
+  const { clinica, planoAtual, cicloAtual, planoNovo, cicloNovo } = entrada;
+  const precoNovo = precoDoCiclo(planoNovo, cicloNovo);
+
+  if (resumoAssinatura(clinica, agora).situacao !== 'em_dia' || !clinica.pagoAte) {
+    return { tipo: 'periodo_cheio', valor: precoNovo };
+  }
+  if (planoAtual.codigo === planoNovo.codigo && cicloAtual === cicloNovo) {
+    return { tipo: 'renovacao', valor: precoNovo };
+  }
+
+  const pagoAte = clinica.pagoAte;
+  const inicio =
+    entrada.periodoInicio && entrada.periodoInicio.getTime() < pagoAte.getTime()
+      ? entrada.periodoInicio
+      : subtrairCiclo(pagoAte, cicloAtual);
+  const proporcao = proporcaoRestante(pagoAte, inicio, agora);
+
+  if (cicloAtual === cicloNovo) {
+    const diferenca = precoNovo - precoDoCiclo(planoAtual, cicloAtual);
+    if (diferenca <= 0) return { tipo: 'downgrade_agendado', aPartirDe: pagoAte };
+    const valor = centavos(diferenca * proporcao);
+    if (valor < VALOR_MINIMO_TROCA) return { tipo: 'sem_custo' };
+    return { tipo: 'upgrade', valor, mantemVencimento: true };
+  }
+
+  const base = entrada.valorPeriodoAtual ?? precoDoCiclo(planoAtual, cicloAtual);
+  const credito = centavos(base * proporcao);
+  // Crédito cobre o novo ciclo inteiro (anual → mensal com meses sobrando): troca no vencimento, sem devolver nada.
+  if (credito >= precoNovo) return { tipo: 'downgrade_agendado', aPartirDe: pagoAte };
+  const novoInicio = agora;
+  const novoFim = somarCiclo(agora, cicloNovo);
+  const valor = centavos(precoNovo - credito);
+  if (valor < VALOR_MINIMO_TROCA) return { tipo: 'sem_custo', credito, novoInicio, novoFim };
+  return { tipo: 'troca_ciclo', valor, credito, novoInicio, novoFim };
 }
 
 export function formatarDataAcesso(data: Date): string {

@@ -301,6 +301,45 @@ também os eventos **Planos e assinaturas** (`subscription_preapproval`, `subscr
 - No downgrade agendado que não cabe nos limites, manter o plano atual cobrando o preço dele ou bloquear
   até a clínica se ajustar?
 
+## Como foi implementado (decisões e o que falta testar)
+- **Recibo:** número sequencial dado só quando o pedido é pago (sequência `pedidos_assinatura_recibo_seq`), em vez
+  de `SERIAL`, para checkout abandonado não abrir buraco na numeração. Os pedidos já pagos foram numerados na
+  migração, em ordem de pagamento. Emissor por `RECIBO_EMISSOR_NOME`, `RECIBO_EMISSOR_CNPJ` e
+  `RECIBO_EMISSOR_ENDERECO` (opcionais; sem CNPJ, a linha some).
+- **Preenchimento dos pedidos antigos:** `npm run build && npm run pagamentos:preencher` (uma vez por ambiente).
+- **Base da proporção:** `periodoInicio` vem do último pedido pago de período cheio que termina no vencimento atual
+  (upgrade não conta). Sem ele (estorno, ajuste manual), usa o vencimento menos um ciclo. O valor do período é o
+  do pedido (mais o crédito, se foi troca de ciclo) quando o plano e o ciclo ainda são os dele; senão, o preço
+  de tabela do plano atual.
+- **Anual → mensal (ou qualquer troca de ciclo) com crédito maior que o novo ciclo:** fica agendada para o
+  vencimento, como o downgrade, em vez de perder crédito ou devolver dinheiro.
+- **Downgrade agendado e pagamento à mão:** escolher o plano agendado no seletor paga a renovação nele, e ele vale
+  assim que o pagamento é confirmado (pagando adiantado, os dias que faltam já são do plano novo). Pagar a renovação
+  no plano atual cancela o agendamento. No vencimento (2 dias antes), a tarefa confere os limites: não cabendo,
+  cancela a troca e manda e-mail (resposta à pergunta em aberto: mantém o plano atual, como no plano).
+- **Troca de ciclo com a cobrança automática ligada:** bloqueada com aviso (desligar, trocar, ligar de novo), porque
+  não está confirmado que o Mercado Pago muda a frequência de uma assinatura.
+- **Cobrança automática:** vale para mensal e anual (frequência 1 ou 12 meses). Reajuste de preço com aviso de
+  30 dias (`DIAS_AVISO_REAJUSTE`): redução vale na hora; aumento manda e-mail e só muda no Mercado Pago depois do
+  prazo. Sem desconto por ativar.
+- **Ainda a confirmar no sandbox** (o código segue a documentação e é defensivo): campos de `preapproval` e de
+  `authorized_payments`, a busca `GET /authorized_payments/search?preapproval_id=`, como o pagamento gerado pela
+  assinatura aponta para ela (`metadata.preapproval_id`, `point_of_interaction.transaction_data.subscription_id`
+  ou `external_reference`) e se o "Trocar cartão" pelo `init_point` funciona com a assinatura já autorizada.
+- **Valor da automática acompanha o plano da próxima cobrança** (troca agendada ou plano atual): é ajustado ao
+  agendar ou cancelar troca, no upgrade, no pagamento à mão e no estorno de troca. Cada cobrança aprovada é
+  aplicada no plano cujo preço bate com o valor cobrado (plano atual primeiro, depois a troca agendada).
+- **Pagamento à mão com a automática ligada:** limpa o aviso de recusa e mostra que o Mercado Pago ainda pode
+  tentar o cartão (se passar, vira mais um período). Pagar em outro ciclo exige desligar a automática antes.
+- **Painel:** trocar o plano, desativar ou excluir uma clínica com a automática ligada é bloqueado até cancelar
+  a automática na ficha da clínica.
+- **Troca de ciclo paga depois (Pix):** o ciclo novo conta de quando o pedido foi aberto (quando o crédito foi
+  calculado). Upgrade confirmado depois do vencimento vai para revisão.
+- **Pendências conhecidas:** cancelar uma troca agendada de um plano com reajuste pendente aplica o preço novo
+  antes dos 30 dias; troca para plano de mesmo preço é agendada mas a cobrança automática mantém o plano atual.
+- **Variável nova opcional:** `MERCADOPAGO_PAGADOR_TESTE` (e-mail da compradora de teste, exigido com credencial de
+  vendedor de teste).
+
 ## Referências
 - Mercado Pago, assinaturas sem plano com pagamento pendente:
   https://www.mercadopago.com.br/developers/en/docs/subscriptions/integration-configuration/subscription-no-associated-plan/pending-payments

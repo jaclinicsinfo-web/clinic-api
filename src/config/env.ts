@@ -77,6 +77,13 @@ export const env = {
   MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || '',
   /** Assinatura secreta do webhook (Suas integrações › Webhooks). Preenchida: aviso sem x-signature válido é recusado. */
   MERCADOPAGO_WEBHOOK_SECRET: process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim() || '',
+  /** Só com credencial de vendedor de teste: e-mail da compradora de teste, exigido na cobrança automática. */
+  MERCADOPAGO_PAGADOR_TESTE: process.env.MERCADOPAGO_PAGADOR_TESTE?.trim() || '',
+
+  /** Quem emite o recibo de pagamento da assinatura. */
+  RECIBO_EMISSOR_NOME: process.env.RECIBO_EMISSOR_NOME?.trim() || 'J.A. Clinics',
+  RECIBO_EMISSOR_CNPJ: process.env.RECIBO_EMISSOR_CNPJ?.trim() || '',
+  RECIBO_EMISSOR_ENDERECO: process.env.RECIBO_EMISSOR_ENDERECO?.trim() || '',
 
   /** Fila de e-mails, lembretes e conferência com o Mercado Pago. Padrão: ligado só em produção. */
   TAREFAS_COBRANCA: ligado('TAREFAS_COBRANCA', (process.env.NODE_ENV ?? 'development') === 'production'),

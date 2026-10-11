@@ -13,7 +13,7 @@ import {
 import { marcarAcessoEnviado } from '../../models/pedido-assinatura.model';
 import { enviarEmail } from './index';
 
-export type TipoEmailSaida = 'acesso' | 'acesso_teste' | 'recibo' | 'lembrete_cobranca';
+export type TipoEmailSaida = 'acesso' | 'acesso_teste' | 'recibo' | 'lembrete_cobranca' | 'cobranca_automatica' | 'aviso_assinatura';
 
 /** Espera depois de cada falha: 1 min, 5 min, 15 min, 1 h, 6 h, 24 h. Depois disso, desiste. */
 const ESPERAS_MIN = [1, 5, 15, 60, 360, 1440];

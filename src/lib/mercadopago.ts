@@ -23,6 +23,47 @@ export interface PagamentoMercadoPago {
   external_reference?: string;
   transaction_amount?: number;
   currency_id?: string;
+  card?: { last_four_digits?: string };
+  /** Pagamento gerado por uma assinatura (preapproval): o Mercado Pago informa o id dela aqui. */
+  metadata?: { preapproval_id?: string } & Record<string, unknown>;
+  point_of_interaction?: { transaction_data?: { subscription_id?: string } };
+}
+
+/** Assinatura sem plano associado ("preapproval"): o Mercado Pago cobra o cartão sozinho. */
+export interface AssinaturaMercadoPago {
+  id?: string;
+  status?: 'pending' | 'authorized' | 'paused' | 'cancelled' | string;
+  init_point?: string;
+  sandbox_init_point?: string;
+  external_reference?: string;
+  payer_email?: string;
+  next_payment_date?: string;
+  payment_method_id?: string;
+  card_id?: string | number;
+  auto_recurring?: {
+    frequency?: number;
+    frequency_type?: string;
+    transaction_amount?: number;
+    currency_id?: string;
+    start_date?: string;
+  };
+  summarized?: { last_charged_date?: string; last_charged_amount?: number };
+}
+
+/** Cada cobrança de uma assinatura (tópico subscription_authorized_payment). */
+export interface CobrancaAutorizadaMercadoPago {
+  id?: number | string;
+  preapproval_id?: string;
+  status?: 'scheduled' | 'processed' | 'recycling' | 'cancelled' | string;
+  transaction_amount?: number;
+  currency_id?: string;
+  external_reference?: string;
+  date_created?: string;
+  debit_date?: string;
+  next_retry_date?: string;
+  retry_attempt?: number;
+  rejection_code?: string;
+  payment?: { id?: number | string; status?: string; status_detail?: string };
 }
 
 function cabecalhos() {
@@ -232,4 +273,121 @@ export function assinaturaWebhookValida(params: {
   const recebido = Buffer.from(v1, 'utf8');
   const calculado = Buffer.from(esperado, 'utf8');
   return recebido.length === calculado.length && timingSafeEqual(recebido, calculado);
+}
+
+// ---------------------------------------------------------------- cobrança automática (preapproval)
+
+function erroDaApi(resposta: Response, acao: string): AppError {
+  if (resposta.status === 429) return new AppError(502, 'Limite de consultas do Mercado Pago (429).');
+  return new AppError(502, `Não foi possível ${acao} no Mercado Pago.`);
+}
+
+/**
+ * Pagador da assinatura. Com credencial de vendedor de teste, o Mercado Pago só aceita o e-mail
+ * da compradora de teste (MERCADOPAGO_PAGADOR_TESTE).
+ */
+async function emailDoAssinante(email: string): Promise<string> {
+  if (env.MERCADOPAGO_PAGADOR_TESTE && (await credencialDeTeste())) return env.MERCADOPAGO_PAGADOR_TESTE;
+  return email;
+}
+
+export async function criarAssinaturaRecorrente(params: {
+  /** Nosso id (assinaturas_recorrentes.id): volta como external_reference. */
+  referencia: string;
+  titulo: string;
+  email: string;
+  ciclo: CicloCobranca;
+  valor: number;
+  /** Primeira cobrança: o vencimento atual da clínica. */
+  inicio: Date;
+  retorno: string;
+}): Promise<{ preapprovalId: string; linkAutorizacao: string; status: string }> {
+  const resposta = await fetch(`${API}/preapproval`, {
+    method: 'POST',
+    headers: cabecalhos(),
+    body: JSON.stringify({
+      reason: params.titulo,
+      external_reference: params.referencia,
+      payer_email: await emailDoAssinante(params.email),
+      auto_recurring: {
+        frequency: params.ciclo === 'anual' ? 12 : 1,
+        frequency_type: 'months',
+        start_date: params.inicio.toISOString(),
+        transaction_amount: Math.round(params.valor * 100) / 100,
+        currency_id: 'BRL',
+      },
+      back_url: params.retorno,
+      status: 'pending',
+    }),
+  });
+  const corpo = (await resposta.json().catch(() => null)) as (AssinaturaMercadoPago & { message?: string }) | null;
+  if (!resposta.ok || !corpo?.id) {
+    await registrarEvento({
+      tipo: 'checkout_recusado',
+      nivel: 'erro',
+      valor: params.valor,
+      mensagem: `Mercado Pago recusou a assinatura automática (HTTP ${resposta.status}): ${corpo?.message ?? 'sem detalhe'}.`,
+      detalhes: { referencia: params.referencia },
+    });
+    throw new AppError(502, 'Não foi possível ativar a cobrança automática agora.');
+  }
+  const link = env.MERCADOPAGO_ACCESS_TOKEN.startsWith('TEST-')
+    ? corpo.sandbox_init_point ?? corpo.init_point
+    : corpo.init_point;
+  if (!link) throw new AppError(502, 'Não foi possível ativar a cobrança automática agora.');
+  return { preapprovalId: corpo.id, linkAutorizacao: link, status: corpo.status ?? 'pending' };
+}
+
+/** `null` quando a assinatura não existe. */
+export async function buscarAssinaturaRecorrente(id: string): Promise<AssinaturaMercadoPago | null> {
+  const resposta = await fetch(`${API}/preapproval/${encodeURIComponent(id)}`, { headers: cabecalhos() });
+  if (resposta.status === 404) return null;
+  if (!resposta.ok) throw erroDaApi(resposta, 'consultar a assinatura');
+  return (await resposta.json()) as AssinaturaMercadoPago;
+}
+
+/** Cancela, pausa ou reativa, e/ou muda o valor das próximas cobranças. */
+export async function atualizarAssinaturaRecorrente(
+  id: string,
+  mudanca: { status?: 'cancelled' | 'paused' | 'authorized'; valor?: number },
+): Promise<AssinaturaMercadoPago> {
+  const corpo: Record<string, unknown> = {};
+  if (mudanca.status) corpo.status = mudanca.status;
+  if (mudanca.valor !== undefined) {
+    corpo.auto_recurring = { transaction_amount: Math.round(mudanca.valor * 100) / 100, currency_id: 'BRL' };
+  }
+  const resposta = await fetch(`${API}/preapproval/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: cabecalhos(),
+    body: JSON.stringify(corpo),
+  });
+  if (!resposta.ok) throw erroDaApi(resposta, 'atualizar a assinatura');
+  return (await resposta.json()) as AssinaturaMercadoPago;
+}
+
+/** `null` quando a cobrança não existe. */
+export async function buscarCobrancaAutorizada(id: string): Promise<CobrancaAutorizadaMercadoPago | null> {
+  const resposta = await fetch(`${API}/authorized_payments/${encodeURIComponent(id)}`, { headers: cabecalhos() });
+  if (resposta.status === 404) return null;
+  if (!resposta.ok) throw erroDaApi(resposta, 'consultar a cobrança automática');
+  return (await resposta.json()) as CobrancaAutorizadaMercadoPago;
+}
+
+/** Cobranças de uma assinatura (conferência diária: aviso perdido). */
+export async function buscarCobrancasDaAssinatura(preapprovalId: string): Promise<CobrancaAutorizadaMercadoPago[]> {
+  const url = new URL(`${API}/authorized_payments/search`);
+  url.searchParams.set('preapproval_id', preapprovalId);
+  const resposta = await fetch(url, { headers: cabecalhos() });
+  if (!resposta.ok) throw erroDaApi(resposta, 'consultar as cobranças automáticas');
+  const corpo = (await resposta.json()) as { results?: CobrancaAutorizadaMercadoPago[] };
+  return corpo.results ?? [];
+}
+
+/** Id da assinatura que gerou o pagamento, ou a referência que mandamos nela. */
+export function assinaturaDoPagamento(pagamento: PagamentoMercadoPago): { preapprovalId: string | null; referencia: string | null } {
+  const preapprovalId =
+    (typeof pagamento.metadata?.preapproval_id === 'string' && pagamento.metadata.preapproval_id) ||
+    pagamento.point_of_interaction?.transaction_data?.subscription_id ||
+    null;
+  return { preapprovalId, referencia: pagamento.external_reference ?? null };
 }

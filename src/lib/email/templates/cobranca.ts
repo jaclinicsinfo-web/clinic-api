@@ -176,3 +176,131 @@ export function montarEmailRecibo(dados: DadosRecibo) {
     `Pagamento confirmado — ${dados.clinica}`,
   );
 }
+
+function ola(nome?: string | null) {
+  return nome ? `Olá, ${nome.trim().split(/\s+/)[0]}.` : 'Olá.';
+}
+
+function cartao(final?: string | null) {
+  return final ? `no cartão final ${final}` : 'no cartão cadastrado';
+}
+
+export interface DadosAvisoAutomatica {
+  clinica: string;
+  nomeAdmin?: string | null;
+  plano: string;
+  ciclo: 'mensal' | 'anual';
+  valor: number;
+  cartaoFinal?: string | null;
+  /** Dia da cobrança (vencimento atual). */
+  cobraEm: Date;
+  link: string;
+  agora?: Date;
+}
+
+/** Cobrança automática ativa: aviso 3 dias antes, no lugar dos lembretes de pagamento manual. */
+export function montarEmailAvisoAutomatica(dados: DadosAvisoAutomatica) {
+  const prazo = prazoRelativo(dados.cobraEm, dados.agora ?? new Date());
+  return montar(
+    {
+      marca: SISTEMA,
+      organizacao: dados.clinica,
+      preheader: `Vamos cobrar ${reais(dados.valor)} ${cartao(dados.cartaoFinal)} em ${data(dados.cobraEm)}.`,
+      titulo: `A cobrança automática é ${prazo}`,
+      paragrafos: [
+        ola(dados.nomeAdmin),
+        `Em ${data(dados.cobraEm)} vamos cobrar ${reais(dados.valor)} ${cartao(dados.cartaoFinal)} pela assinatura ${dados.ciclo === 'anual' ? 'anual' : 'mensal'} do plano ${dados.plano} da ${dados.clinica}. Você não precisa fazer nada.`,
+        'Para trocar o cartão ou desligar a cobrança automática, entre em Configurações › Assinatura.',
+      ],
+      botao: { rotulo: 'Ver a assinatura', url: dados.link },
+    },
+    `Cobrança de ${reais(dados.valor)} no cartão ${prazo} — ${dados.clinica}`,
+  );
+}
+
+export interface DadosAutomaticaRecusada {
+  clinica: string;
+  nomeAdmin?: string | null;
+  valor: number;
+  cartaoFinal?: string | null;
+  vence: Date;
+  bloqueia: Date;
+  link: string;
+}
+
+export function montarEmailAutomaticaRecusada(dados: DadosAutomaticaRecusada) {
+  return montar(
+    {
+      marca: SISTEMA,
+      organizacao: dados.clinica,
+      preheader: 'A cobrança no cartão não passou. Atualize o cartão ou pague por Pix.',
+      titulo: 'A cobrança no cartão não passou',
+      paragrafos: [
+        ola(dados.nomeAdmin),
+        `A cobrança automática de ${reais(dados.valor)} ${cartao(dados.cartaoFinal)} da ${dados.clinica} foi recusada. O Mercado Pago tenta de novo nos próximos dias.`,
+        `Para não correr o risco de bloqueio, atualize o cartão ou pague agora por Pix ou outro cartão. A assinatura venceu em ${data(dados.vence)} e o acesso é bloqueado em ${data(dados.bloqueia)} se nada for pago.`,
+      ],
+      botao: { rotulo: 'Atualizar o cartão ou pagar', url: dados.link },
+      aviso: 'Se você já pagou, desconsidere este e-mail.',
+    },
+    `A cobrança no cartão da ${dados.clinica} não passou`,
+  );
+}
+
+export interface DadosTrocaNaoAplicada {
+  clinica: string;
+  nomeAdmin?: string | null;
+  planoAtual: string;
+  planoAgendado: string;
+  motivo: string;
+  link: string;
+}
+
+/** Downgrade agendado que não cabe nos limites no vencimento: o plano atual continua. */
+export function montarEmailTrocaNaoAplicada(dados: DadosTrocaNaoAplicada) {
+  return montar(
+    {
+      marca: SISTEMA,
+      organizacao: dados.clinica,
+      preheader: `A troca para o plano ${dados.planoAgendado} não foi feita. O plano ${dados.planoAtual} continua.`,
+      titulo: 'A troca de plano não foi feita',
+      paragrafos: [
+        ola(dados.nomeAdmin),
+        `A troca agendada da ${dados.clinica} para o plano ${dados.planoAgendado} não foi aplicada: ${dados.motivo}`,
+        `O plano ${dados.planoAtual} continua valendo, com o preço dele. Se ainda quiser trocar, ajuste usuários e unidades e agende de novo em Configurações › Assinatura.`,
+      ],
+      botao: { rotulo: 'Ver a assinatura', url: dados.link },
+    },
+    `A troca de plano da ${dados.clinica} não foi feita`,
+  );
+}
+
+export interface DadosReajuste {
+  clinica: string;
+  nomeAdmin?: string | null;
+  plano: string;
+  ciclo: 'mensal' | 'anual';
+  valorAtual: number;
+  valorNovo: number;
+  aPartirDe: Date;
+  link: string;
+}
+
+/** Aumento de preço com a cobrança automática ativa: aviso antes de cobrar o valor novo. */
+export function montarEmailReajuste(dados: DadosReajuste) {
+  return montar(
+    {
+      marca: SISTEMA,
+      organizacao: dados.clinica,
+      preheader: `A partir de ${data(dados.aPartirDe)}, a cobrança automática passa a ${reais(dados.valorNovo)}.`,
+      titulo: 'O preço do seu plano vai mudar',
+      paragrafos: [
+        ola(dados.nomeAdmin),
+        `O plano ${dados.plano} ${dados.ciclo === 'anual' ? 'anual' : 'mensal'} passa de ${reais(dados.valorAtual)} para ${reais(dados.valorNovo)}. As cobranças automáticas a partir de ${data(dados.aPartirDe)} já vêm com o valor novo.`,
+        'Se preferir, você pode desligar a cobrança automática ou trocar de plano em Configurações › Assinatura.',
+      ],
+      botao: { rotulo: 'Ver a assinatura', url: dados.link },
+    },
+    `Novo preço do plano ${dados.plano} — ${dados.clinica}`,
+  );
+}

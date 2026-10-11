@@ -12,22 +12,38 @@ export interface ClinicaParaLembrete {
   cicloCobranca: string;
   trialExpiraEm: Date | null;
   pagoAte: Date | null;
+  /** Ciclo e plano que valem na renovação (com troca agendada, os dela). O marco usa o ciclo atual. */
+  cicloRenovacao: string;
   planoNome: string;
   precoMensal: number;
   precoAnual: number;
+  /** Cobrança automática ativa: valor e cartão que o Mercado Pago vai cobrar no vencimento. */
+  automatica: boolean;
+  automaticaValor: number | null;
+  cartaoFinal: string | null;
 }
 
 /**
  * Clínicas que podem estar num marco de lembrete: pagas pelo Mercado Pago perto do vencimento
  * ou em teste perto do fim. trialExpiraEm guarda o relógio de São Paulo sem fuso.
+ * Com troca agendada, o lembrete já mostra o plano e o ciclo que valem na renovação.
  */
 export async function listarClinicasParaLembrete(): Promise<ClinicaParaLembrete[]> {
-  const linhas = await prisma.$queryRaw<(ClinicaParaLembrete & { precoMensal: unknown; precoAnual: unknown })[]>`
-    SELECT c.id, c."nomeFantasia", c.email, c.status, c."tipoAcesso", c."cicloCobranca",
-           c."trialExpiraEm", c."pagoAte", p.nome AS "planoNome",
-           p."precoMensal" AS "precoMensal", p."precoAnual" AS "precoAnual"
+  const linhas = await prisma.$queryRaw<
+    (ClinicaParaLembrete & { precoMensal: unknown; precoAnual: unknown; automaticaValor: unknown })[]
+  >`
+    SELECT c.id, c."nomeFantasia", c.email, c.status, c."tipoAcesso",
+           c."cicloCobranca",
+           CASE WHEN c."planoAgendadoId" IS NULL THEN c."cicloCobranca"
+                ELSE COALESCE(c."cicloAgendado", c."cicloCobranca") END AS "cicloRenovacao",
+           c."trialExpiraEm", c."pagoAte", COALESCE(pa.nome, p.nome) AS "planoNome",
+           COALESCE(pa."precoMensal", p."precoMensal") AS "precoMensal",
+           COALESCE(pa."precoAnual", p."precoAnual") AS "precoAnual",
+           (ar.id IS NOT NULL) AS automatica, ar.valor AS "automaticaValor", ar."cartaoFinal"
     FROM clinicas c
     JOIN planos p ON p.id = c."planoId"
+    LEFT JOIN planos pa ON pa.id = c."planoAgendadoId"
+    LEFT JOIN assinaturas_recorrentes ar ON ar."clinicaId" = c.id AND ar.status = 'ativa'
     WHERE c.status = 'ativa'
       AND (
         (c."tipoAcesso" = 'pago' AND c."pagoAte" BETWEEN now() - interval '8 days' AND now() + interval '31 days')
@@ -42,6 +58,7 @@ export async function listarClinicasParaLembrete(): Promise<ClinicaParaLembrete[
     ...linha,
     precoMensal: Number(linha.precoMensal),
     precoAnual: Number(linha.precoAnual),
+    automaticaValor: linha.automaticaValor === null ? null : Number(linha.automaticaValor),
   }));
 }
 
@@ -54,9 +71,35 @@ export async function listarAdministradoresAtivos(clinicaId: string) {
 }
 
 export async function buscarSituacaoClinica(clinicaId: string) {
-  return prisma.clinica.findUnique({
+  const clinica = await prisma.clinica.findUnique({
     where: { id: clinicaId },
-    select: { status: true, tipoAcesso: true, trialExpiraEm: true, pagoAte: true },
+    select: { status: true, tipoAcesso: true, trialExpiraEm: true, pagoAte: true, cicloCobranca: true },
+  });
+  if (!clinica) return null;
+  const automatica = await prisma.assinaturaRecorrente.findFirst({
+    where: { clinicaId, status: 'ativa' },
+    select: { id: true },
+  });
+  return { ...clinica, automatica: Boolean(automatica) };
+}
+
+/** Troca agendada perto (ou depois) do vencimento: conferir limites e o valor da automática. */
+export async function listarTrocasAgendadasNoVencimento() {
+  return prisma.clinica.findMany({
+    where: {
+      status: 'ativa',
+      planoAgendadoId: { not: null },
+      pagoAte: { not: null, lt: new Date(Date.now() + 2 * DIA_MS) },
+    },
+    select: {
+      id: true,
+      nomeFantasia: true,
+      pagoAte: true,
+      cicloCobranca: true,
+      cicloAgendado: true,
+      plano: true,
+      planoAgendado: true,
+    },
   });
 }
 
@@ -140,7 +183,7 @@ export async function expirarPendentesAntigos() {
 export async function listarEmRevisao() {
   return prisma.pedidoAssinatura.findMany({
     where: { status: 'revisao' },
-    select: { id: true, clinicaId: true, valor: true, pagamentoId: true, atualizadoEm: true },
+    select: { id: true, tipo: true, clinicaId: true, valor: true, pagamentoId: true, atualizadoEm: true },
   });
 }
 

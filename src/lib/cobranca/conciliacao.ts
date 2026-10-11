@@ -12,6 +12,12 @@ import {
 } from '../../models/cobranca-assinatura.model';
 import { buscarPedido } from '../../models/pedido-assinatura.model';
 import { conferirPedidoPago, conferirPedidoPendente } from '../../services/assinatura.service';
+import {
+  aplicarReajustes,
+  aplicarTrocasAgendadas,
+  conferirAutomatica,
+  listarParaConferir,
+} from '../../services/cobranca-automatica.service';
 
 /** Pausa entre chamadas para não estourar o limite do Mercado Pago. */
 const PAUSA_MS = 200;
@@ -23,6 +29,8 @@ export interface ResumoConciliacao {
   pagosConferidos: number;
   estornadosPelaConferencia: number;
   expirados: number;
+  automaticasConferidas: number;
+  trocasEReajustes: number;
 }
 
 function limiteDoMercadoPago(err: unknown) {
@@ -43,6 +51,8 @@ export async function conciliarPagamentos(): Promise<ResumoConciliacao> {
     pagosConferidos: 0,
     estornadosPelaConferencia: 0,
     expirados: 0,
+    automaticasConferidas: 0,
+    trocasEReajustes: 0,
   };
   if (ocupado || !env.MERCADOPAGO_ACCESS_TOKEN) return resumo;
   ocupado = true;
@@ -98,9 +108,26 @@ export async function conciliarPagamentos(): Promise<ResumoConciliacao> {
           pagamentoId: pedido.pagamentoId,
           valor: Number(pedido.valor),
           status: 'revisao',
-          mensagem: 'Pedido pago continua em revisão (CNPJ ou e-mail já existia). Resolva com o cliente ou devolva o pagamento.',
+          mensagem:
+            pedido.tipo === 'troca_plano'
+              ? 'Troca de plano paga continua em revisão (a assinatura mudou antes da confirmação). Aplique à mão ou devolva o pagamento.'
+              : 'Pedido pago continua em revisão (CNPJ ou e-mail já existia). Resolva com o cliente ou devolva o pagamento.',
         });
       }
+
+      // Cobrança automática: cada assinatura uma vez por dia (estado e cobranças sem aviso).
+      for (const automatica of await listarParaConferir(30)) {
+        try {
+          await conferirAutomatica(automatica);
+          resumo.automaticasConferidas += 1;
+        } catch (err) {
+          console.error('[conciliacao] cobrança automática não conferida', automatica.id, mensagemDeErro(err));
+          if (limiteDoMercadoPago(err)) return;
+        }
+        await esperar(PAUSA_MS);
+      }
+      resumo.trocasEReajustes += await aplicarTrocasAgendadas();
+      resumo.trocasEReajustes += await aplicarReajustes();
     });
   } catch (err) {
     console.error('[conciliacao] falha no ciclo', mensagemDeErro(err));

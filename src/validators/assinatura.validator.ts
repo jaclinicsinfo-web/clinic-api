@@ -17,6 +17,10 @@ export const pedidoIdSchema = z.object({
   pedidoId: z.string().uuid('Pedido inválido.'),
 });
 
+export const clinicaIdSchema = z.object({
+  clinicaId: z.string().uuid('Clínica inválida.'),
+});
+
 export const pagamentoClinicaSchema = z.object({
   plano: cadastroSchema.shape.plano,
   ciclo: z.enum(['mensal', 'anual'], { message: 'Escolha mensal ou anual.' }),
